@@ -16,7 +16,14 @@ $ go run .\blocksize_choices\test_blocks.go
 $ go run .\privacy_metrics\test_metrics.go
 ```
 
-### Testing attack success rate
+### Testing attack success rate based on entropy or transition
 ```bash
-$ go run .\asr\test_asr.go
+$ go run .\asr\test_asr.go 1 2 0 1 60 80
 ```
+Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
+
+### Testing attack success rate based on data uniqueness
+```bash
+$ go run .\asr_uniqueness\test_uniqueness.go 1 2 0 1 60 20
+```
+Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
