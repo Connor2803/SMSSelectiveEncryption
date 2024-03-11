@@ -1,6 +1,6 @@
 # Introduction
 
-This is the code for protecting privacy using single-party and multi-party homomorphic encryption via Lattigo Library.
+This is the code for protecting privacy using selective homomorphic encryption via Lattigo Library.
 
 The proprocessed data has been put into the example\dataset folder.
 
