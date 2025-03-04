@@ -171,7 +171,7 @@ func main() {
 	fmt.Printf("Main() Done in %s \n", time.Since(start))
 }
 
-//main start
+// main start
 func process(fileList []string, params ckks.Parameters) {
 
 	// Create each party, and allocate the memory for all the shares that the protocols will need
@@ -516,7 +516,7 @@ func encPhase(params ckks.Parameters, P []*party, pk *rlwe.PublicKey, encoder ck
 	return
 }
 
-//generate parties
+// generate parties
 func genparties(params ckks.Parameters, fileList []string) []*party {
 
 	// Create each party, and allocate the memory for all the shares that the protocols will need
@@ -532,7 +532,7 @@ func genparties(params ckks.Parameters, fileList []string) []*party {
 	return P
 }
 
-//file reading
+// file reading
 func ReadCSV(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -542,14 +542,14 @@ func ReadCSV(path string) []string {
 	return dArray[:len(dArray)-1]
 }
 
-//trim csv
+// trim csv
 func resizeCSV(filename string) []float64 {
 	csv := ReadCSV(filename)
 
 	elements := []float64{}
 	for _, v := range csv {
 		slices := strings.Split(v, ",")
-		tmpStr := slices[len(slices)-1]
+		tmpStr := strings.TrimSpace(slices[len(slices)-1])
 		fNum, err := strconv.ParseFloat(tmpStr, 64)
 		if err != nil {
 			panic(err)
@@ -565,7 +565,7 @@ func getRandom(numberRange int) (randNumber int) {
 	return
 }
 
-//generate inputs of parties
+// generate inputs of parties
 func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, minEntropy, maxEntropy, entropySum float64, transitionSum int) {
 
 	sectionNum = 0

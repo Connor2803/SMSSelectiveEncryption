@@ -1,4 +1,5 @@
-/**
+/*
+*
 running command: // strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
 go run .\asr\test_asr.go 1 2 0 1 60 80
 */
@@ -698,7 +699,7 @@ func resizeCSV(filename string) []float64 {
 	elements := []float64{}
 	for _, v := range csv {
 		slices := strings.Split(v, ",")
-		tmpStr := slices[len(slices)-1]
+		tmpStr := strings.TrimSpace(slices[len(slices)-1])
 		fNum, err := strconv.ParseFloat(tmpStr, 64)
 		if err != nil {
 			panic(err)
