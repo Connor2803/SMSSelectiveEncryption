@@ -15,8 +15,9 @@ The code is running on Windows platform, and not tested on Linux or Mac.
 
 ### Testing performance among different block size choices
 ```bash
-$ go run .\blocksize_choices\test_blocks.go
+$ go run .\blocksize_choices\test_blocks.go 1 1 80
 ```
+Params meaning: strategy, dataset, maxHouseholdsNumber
 
 ### Testing privacy metrics like entropy, transition
 ```bash
