@@ -1,0 +1,22 @@
+>>>>>>>>>>
+Strategy: Random
+Dataset: Water
+Number of Households:  80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-------------------------->
+SectionSize = 1024
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 73.4079ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 146.8755ms
+-------------------------->
+SectionSize = 2048
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 230.0706ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 381.3388ms
+-------------------------->
+SectionSize = 4096
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 403.7789ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 602.2169ms
+-------------------------->
+SectionSize = 8192
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 1.4630777s
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 1.8013876s
+Main() Done in 10.2354645s 
