@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Define possible values for parameters
-datasets=(1 2)
 strategies=(1 2 3)
+datasets=(1 2)
 maxHouseholdsNumber=80
 
 # Create output directory

@@ -1,0 +1,60 @@
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Strategy: Random
+Dataset: Electricity
+Target: Entropy based
+Performance Loop:  1
+Number of Households:  80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>Entropy Histograme:
+0.025,31
+0.075,160
+0.125,159
+0.175,117
+0.225,96
+0.275,77
+0.325,43
+0.375,39
+0.425,20
+0.475,10
+0.525,11
+0.575,4
+0.625,4
+0.675,6
+0.725,9
+0.775,5
+0.825,5
+0.875,1
+0.925,1
+0.975,2
+threshold = 0.0, entropy/transition remain = 10.175,7.624
+threshold = 0.1, entropy/transition remain = 9.166,7.000
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 33.7936ms,38.90145ms
+threshold = 0.2, entropy/transition remain = 8.144,6.118
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 32.8894ms,44.2065ms
+threshold = 0.3, entropy/transition remain = 7.124,5.480
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 34.3205ms,46.4329ms
+threshold = 0.4, entropy/transition remain = 6.105,4.800
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 31.1926ms,51.8767ms
+threshold = 0.5, entropy/transition remain = 5.089,4.079
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 31.2911ms,58.0236ms
+threshold = 0.6, entropy/transition remain = 4.068,3.210
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 38.83355ms,59.5443ms
+threshold = 0.7, entropy/transition remain = 3.049,2.527
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 33.9916ms,59.60245ms
+threshold = 0.8, entropy/transition remain = 2.031,1.768
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 31.39885ms,69.80165ms
+threshold = 0.9, entropy/transition remain = 1.015,0.995
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 32.2958ms,72.3545ms
+threshold = 1.0, entropy/transition remain = -0.000,0.000
+standardError: 0.000, 0.000
+***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 39.18015ms,79.36435ms
+Main() Done in 4.5732738s 
