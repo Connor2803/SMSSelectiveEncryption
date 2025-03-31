@@ -27,9 +27,9 @@ Params meaning: strategy, dataset, target, maxHouseholdsNumber
 
 ### Testing attack success rate based on entropy or transition
 ```bash
-$ go run .\asr\test_asr.go 1 2 0 1 60 80
+$ go run .\asr\test_asr.go 1 2 1 0 60 80
 ```
-Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
+Params meaning: strategy, dataset, target, uniqueATD encryptionRatio, maxHouseholdsNumber
 
 ### Testing attack success rate based on data uniqueness
 ```bash
