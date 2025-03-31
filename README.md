@@ -21,8 +21,9 @@ Params meaning: strategy, dataset, maxHouseholdsNumber
 
 ### Testing privacy metrics like entropy, transition
 ```bash
-$ go run .\privacy_metrics\test_metrics.go
+$ go run .\privacy_metrics\test_metrics.go 1 1 1 80
 ```
+Params meaning: strategy, dataset, target, maxHouseholdsNumber
 
 ### Testing attack success rate based on entropy or transition
 ```bash
