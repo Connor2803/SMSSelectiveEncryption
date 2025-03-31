@@ -1,0 +1,22 @@
+>>>>>>>>>>
+Strategy: Household Entropy High To Low
+Dataset: Electricity
+Number of Households:  80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-------------------------->
+SectionSize = 1024
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 62.3866ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 157.5423ms
+-------------------------->
+SectionSize = 2048
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 213.7317ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 387.3632ms
+-------------------------->
+SectionSize = 4096
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 390.9846ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 607.1005ms
+-------------------------->
+SectionSize = 8192
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 1.3679146s
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 1.7430628s
+Main() Done in 9.7943558s 

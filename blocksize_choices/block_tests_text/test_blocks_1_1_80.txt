@@ -1,0 +1,22 @@
+>>>>>>>>>>
+Strategy: Global Entropy High To Low
+Dataset: Water
+Number of Households:  80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-------------------------->
+SectionSize = 1024
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 71.0178ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 152.9902ms
+-------------------------->
+SectionSize = 2048
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 225.027ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 384.5795ms
+-------------------------->
+SectionSize = 4096
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 406.0697ms
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 609.1567ms
+-------------------------->
+SectionSize = 8192
+***** Evaluating Summation time for 80 households in thirdparty analyst's side: 1.4225475s
+***** Evaluating Deviation time for 80 households in thirdparty analyst's side: 1.7235052s
+Main() Done in 10.2940829s 

@@ -1,3 +1,8 @@
+/*
+*
+running command: // strategy, dataset, target, maxHouseholdsNumber
+go run .\privacy_metrics\test_metrics.go 1 1 1 80
+*/
 package main
 
 import (
@@ -107,7 +112,7 @@ var NGoRoutine int = 1 // Default number of Go routines
 var encryptedSectionNum int
 var globalPartyRows = -1
 
-const PERFORMANCE_LOOPS = 2000
+const PERFORMANCE_LOOPS = 1
 const MAX_PARTY_ROWS = 10240 // total reocrds per household
 const sectionSize = 1024     //block size, 2048 for summation correctness, 8192 for variance correctness
 
@@ -134,7 +139,24 @@ func main() {
 		currentStrategy = args[0]
 		currentDataset = args[1]
 		currentTarget = args[2]
+		maxHouseholdsNumber = args[3]
 	}
+
+	//write to file
+	str := "test_metrics"
+	fileName := fmt.Sprintf("%s_%d_%d_%d_%d.txt", str, currentStrategy, currentDataset, currentTarget, maxHouseholdsNumber)
+
+	file, err := os.Create(fileName)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	originalOutput := os.Stdout
+	defer func() { os.Stdout = originalOutput }()
+	os.Stdout = file
+	//write to file
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	if currentStrategy == STRATEGY_GLOBAL {
@@ -164,7 +186,6 @@ func main() {
 	start := time.Now()
 
 	fileList := []string{}
-	var err error
 	paramsDef := utils.PN10QP27CI
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)

@@ -15,13 +15,15 @@ The code is running on Windows platform, and not tested on Linux or Mac.
 
 ### Testing performance among different block size choices
 ```bash
-$ go run .\blocksize_choices\test_blocks.go
+$ go run .\blocksize_choices\test_blocks.go 1 1 80
 ```
+Params meaning: strategy, dataset, maxHouseholdsNumber
 
 ### Testing privacy metrics like entropy, transition
 ```bash
-$ go run .\privacy_metrics\test_metrics.go
+$ go run .\privacy_metrics\test_metrics.go 1 1 1 80
 ```
+Params meaning: strategy, dataset, target, maxHouseholdsNumber
 
 ### Testing attack success rate based on entropy or transition
 ```bash

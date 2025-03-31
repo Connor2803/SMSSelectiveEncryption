@@ -1,3 +1,8 @@
+/*
+*
+running command: // strategy, dataset, maxHouseholdsNumber
+go run .\blocksize_choices\test_blocks.go 1 1 80
+*/
 package main
 
 import (
@@ -110,6 +115,55 @@ var sectionNum int
 var paramsDefs = []ckks.ParametersLiteral{utils.PN10QP27CI, utils.PN11QP54CI, ckks.PN12QP109CI, ckks.PN13QP218CI, ckks.PN14QP438CI, ckks.PN15QP880CI} //, ckks.PN16QP1761CI
 
 func main() {
+	var err error
+
+	var args []int
+	for _, arg := range os.Args[1:] {
+		num, err := strconv.Atoi(arg)
+		if err != nil {
+			return
+		}
+		args = append(args, num)
+	}
+
+	if len(args) > 0 {
+		currentStrategy = args[0]
+		currentDataset = args[1]
+		maxHouseholdsNumber = args[2]
+	}
+
+	//write to file
+	str := "test_blocks"
+	fileName := fmt.Sprintf("%s_%d_%d_%d.txt", str, currentStrategy, currentDataset, maxHouseholdsNumber)
+
+	file, err := os.Create(fileName)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	originalOutput := os.Stdout
+	defer func() { os.Stdout = originalOutput }()
+	os.Stdout = file
+	//write to file
+
+	fmt.Println(">>>>>>>>>>")
+	if currentStrategy == STRATEGY_GLOBAL {
+		fmt.Println("Strategy: Global Entropy High To Low")
+	} else if currentStrategy == STRATEGY_HOUSEHOLD {
+		fmt.Println("Strategy: Household Entropy High To Low")
+	} else {
+		fmt.Println("Strategy: Random")
+	}
+	if currentDataset == DATASET_WATER {
+		fmt.Println("Dataset: Water")
+	} else {
+		fmt.Println("Dataset: Electricity")
+	}
+	fmt.Println("Number of Households: ", maxHouseholdsNumber)
+	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
 	rand.Seed(time.Now().UnixNano())
 	start := time.Now()
 
