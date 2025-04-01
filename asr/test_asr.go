@@ -1,7 +1,7 @@
 /*
 *
-running command: // strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
-go run .\asr\test_asr.go 1 2 0 1 60 80
+running command: // strategy, dataset, target, uniqueATD, encryptionRatio, maxHouseholdsNumber
+go run .\asr\test_asr.go 1 2 1 0 60 80
 */
 package main
 
@@ -86,7 +86,7 @@ const ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD = 2
 
 var atdSize = 24 // element number of unique attacker data
 var min_percent_matched = 100
-var max_attackLoop = 1000
+var max_attackLoop = 100
 
 var maxHouseholdsNumber = 80
 
@@ -99,7 +99,7 @@ var currentStrategy int = 1 //Global(1), Household(2), Random(3)
 var currentDataset int = 1  //water(1),electricity(2)
 var uniqueATD int = 0       // unique attacker data, 1 for true, 0 for false
 var currentTarget = 2       //entropy(1),transition(2)
-var encryptionRatio int
+var encryptionRatio int = 60
 
 var transitionEqualityThreshold int
 var sectionNum int
@@ -125,15 +125,15 @@ func main() {
 	if len(args) > 0 {
 		currentStrategy = args[0]
 		currentDataset = args[1]
-		uniqueATD = args[2]
-		currentTarget = args[3]
+		currentTarget = args[2]
+		uniqueATD = args[3]
 		encryptionRatio = args[4]
 		maxHouseholdsNumber = args[5]
 	}
 
 	//write to file
-	str := "asr_entended_time"
-	fileName := fmt.Sprintf("%s_%d_%d_%d_%d.txt", str, currentDataset, currentTarget, encryptionRatio, maxHouseholdsNumber)
+	str := "test_avg_asr_time"
+	fileName := fmt.Sprintf("%s_%d_%d_%d_%d_%d_%d.txt", str, currentStrategy, currentDataset, currentTarget, uniqueATD, encryptionRatio, maxHouseholdsNumber)
 
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -298,9 +298,9 @@ func process(fileList []string, params ckks.Parameters) {
 		entropySum -= entropyReduction
 		transitionSum -= transitionReduction
 
-		// if en == 6 {
-		// 	memberIdentificationAttack(P) //under current partial encryption
-		// }
+		if en == 6 {
+			memberIdentificationAttack(P) //under current partial encryption
+		}
 		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
 	}
 	elapsedTime += time.Since(startTime)
@@ -323,7 +323,9 @@ func memberIdentificationAttack(P []*party) { //TODO:atd size
 			break
 		}
 	}
+	// fmt.Printf("attackSuccessNum: %d, attackCount: %d\n", attackSuccessNum, attackCount)
 	house_sample = append(house_sample, float64(attackSuccessNum)/float64(attackCount))
+	// fmt.Println("house_sample:", house_sample)
 }
 
 func attackParties(P []*party) (attackSuccessNum int) {
@@ -817,6 +819,10 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 }
 
 func calculateStandardDeviation(numbers []float64) (float64, float64) {
+	if len(numbers) == 0 {
+		fmt.Println("Warning: numbers array is empty")
+		return 0, 0
+	}
 	var sum float64
 	for _, num := range numbers {
 		sum += num
