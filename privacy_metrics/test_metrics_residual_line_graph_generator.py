@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # Directories
 input_folder = './metrics_tests_text/'
-output_folder = './metrics_tests_line_graphs/'
+output_folder = './metrics_tests_residual_line_graphs/'
 
 # Ensure the output folder exists
 if not os.path.exists(output_folder):
