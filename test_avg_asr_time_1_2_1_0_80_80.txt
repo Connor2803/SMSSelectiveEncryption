@@ -1,0 +1,184 @@
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Strategy: Global Entropy High To Low
+Dataset: Electricity
+Unique Attacker Block: False
+Target: Entropy based
+SE threshold  0.01
+Max Attack Loop:  5
+ATD Size:  24
+Number of Households:  80
+Encryption ratio:  80 %
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+wd: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption
+path: examples\datasets\electricity\households_10240
+folder: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption\examples\datasets\electricity\households_10240
+fileList:80
+Households, ASR, Standard Error
+Encrypted section number: 0
+Encrypted section number: 1
+Encrypted section number: 2
+Encrypted section number: 3
+Encrypted section number: 4
+Encrypted section number: 5
+Encrypted section number: 6
+Encrypted section number: 6
+Sample: [1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: NaN
+Standard error in memberIdentificationAttack: NaN
+Sample: [1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.7071067811865476
+Standard error in memberIdentificationAttack: 0.5
+Sample: [1 0 1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5773502691896258
+Standard error in memberIdentificationAttack: 0.33333333333333337
+Sample: [1 0 1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5773502691896257
+Standard error in memberIdentificationAttack: 0.28867513459481287
+Sample: [1 0 1 0 1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5477225575051662
+Standard error in memberIdentificationAttack: 0.24494897427831783
+attackSuccessNum: 3, attackCount: 5
+house_sample: [0.6]
+Encrypted section number: 7
+Encrypted section number: 8
+Calling calculateStandardDeviation in main()
+Encrypted section number: 0
+Encrypted section number: 1
+Encrypted section number: 2
+Encrypted section number: 3
+Encrypted section number: 4
+Encrypted section number: 5
+Encrypted section number: 6
+Encrypted section number: 6
+Sample: [0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: NaN
+Standard error in memberIdentificationAttack: NaN
+Sample: [0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0
+Standard error in memberIdentificationAttack: 0
+Sample: [0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0
+Standard error in memberIdentificationAttack: 0
+Sample: [0 0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0
+Standard error in memberIdentificationAttack: 0
+Sample: [0 0 0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0
+Standard error in memberIdentificationAttack: 0
+attackSuccessNum: 0, attackCount: 5
+house_sample: [0.6 0]
+Encrypted section number: 7
+Encrypted section number: 8
+Calling calculateStandardDeviation in main()
+Encrypted section number: 0
+Encrypted section number: 1
+Encrypted section number: 2
+Encrypted section number: 3
+Encrypted section number: 4
+Encrypted section number: 5
+Encrypted section number: 6
+Encrypted section number: 6
+Sample: [1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: NaN
+Standard error in memberIdentificationAttack: NaN
+Sample: [1 1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0
+Standard error in memberIdentificationAttack: 0
+Sample: [1 1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5773502691896258
+Standard error in memberIdentificationAttack: 0.33333333333333337
+Sample: [1 1 0 1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5
+Standard error in memberIdentificationAttack: 0.25
+Sample: [1 1 0 1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5477225575051662
+Standard error in memberIdentificationAttack: 0.24494897427831783
+attackSuccessNum: 3, attackCount: 5
+house_sample: [0.6 0 0.6]
+Encrypted section number: 7
+Encrypted section number: 8
+Calling calculateStandardDeviation in main()
+Encrypted section number: 0
+Encrypted section number: 1
+Encrypted section number: 2
+Encrypted section number: 3
+Encrypted section number: 4
+Encrypted section number: 5
+Encrypted section number: 6
+Encrypted section number: 6
+Sample: [0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: NaN
+Standard error in memberIdentificationAttack: NaN
+Sample: [0 1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.7071067811865476
+Standard error in memberIdentificationAttack: 0.5
+Sample: [0 1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5773502691896258
+Standard error in memberIdentificationAttack: 0.33333333333333337
+Sample: [0 1 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5
+Standard error in memberIdentificationAttack: 0.25
+Sample: [0 1 0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.44721359549995804
+Standard error in memberIdentificationAttack: 0.20000000000000004
+attackSuccessNum: 1, attackCount: 5
+house_sample: [0.6 0 0.6 0.2]
+Encrypted section number: 7
+Encrypted section number: 8
+Calling calculateStandardDeviation in main()
+Encrypted section number: 0
+Encrypted section number: 1
+Encrypted section number: 2
+Encrypted section number: 3
+Encrypted section number: 4
+Encrypted section number: 5
+Encrypted section number: 6
+Encrypted section number: 6
+Sample: [1]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: NaN
+Standard error in memberIdentificationAttack: NaN
+Sample: [1 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.7071067811865476
+Standard error in memberIdentificationAttack: 0.5
+Sample: [1 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5773502691896258
+Standard error in memberIdentificationAttack: 0.33333333333333337
+Sample: [1 0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.5
+Standard error in memberIdentificationAttack: 0.25
+Sample: [1 0 0 0 0]
+Calling calculateStandardDeviation in memberIdentificationAttack
+Standard deviation in memberIdentificationAttack: 0.44721359549995804
+Standard error in memberIdentificationAttack: 0.20000000000000004
+attackSuccessNum: 1, attackCount: 5
+house_sample: [0.6 0 0.6 0.2 0.2]
+Encrypted section number: 7
+Encrypted section number: 8
+Calling calculateStandardDeviation in main()
+Number of households: 80, mean ASR: 0.320, standard error: 0.120
+asr_enxteded encryption time: 0.35 seconds
+Main() Done in 3.5433938s 

@@ -86,7 +86,7 @@ const ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD = 2
 
 var atdSize = 24 // element number of unique attacker data
 var min_percent_matched = 100
-var max_attackLoop = 100
+var max_attackLoop = 5
 
 var maxHouseholdsNumber = 80
 
@@ -259,6 +259,7 @@ func main() {
 					}
 				}
 				process(randomFileList, params)
+				fmt.Println("Calling calculateStandardDeviation in main()")
 				std, mean = calculateStandardDeviation(house_sample)
 				standard_error = std / math.Sqrt(float64(len(house_sample)))
 				if standard_error <= 0.01 && loop_count >= 100 {
@@ -288,6 +289,7 @@ func process(fileList []string, params ckks.Parameters) {
 
 	startTime := time.Now()
 	for en := 0; en <= encryptedSectionNum; en++ {
+		fmt.Println("Encrypted section number:", en)
 		if currentStrategy == STRATEGY_GLOBAL {
 			_, entropyReduction, transitionReduction = markEncryptedSectionsByGlobal(en, P, entropySum, transitionSum)
 		} else if currentStrategy == STRATEGY_HOUSEHOLD {
@@ -299,6 +301,7 @@ func process(fileList []string, params ckks.Parameters) {
 		transitionSum -= transitionReduction
 
 		if en == 6 {
+			fmt.Println("Encrypted section number:", en)
 			memberIdentificationAttack(P) //under current partial encryption
 		}
 		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
@@ -316,16 +319,20 @@ func memberIdentificationAttack(P []*party) { //TODO:atd size
 		var successNum = attackParties(P)
 		attackSuccessNum += successNum
 		sample = append(sample, float64(successNum))
+		fmt.Println("Sample:", sample)
+		fmt.Println("Calling calculateStandardDeviation in memberIdentificationAttack")
 		std, _ = calculateStandardDeviation(sample)
+		fmt.Println("Standard deviation in memberIdentificationAttack:", std)
 		standard_error = std / math.Sqrt(float64(len(sample)))
+		fmt.Println("Standard error in memberIdentificationAttack:", standard_error)
 		if standard_error <= 0.01 && attackCount >= 100 {
 			attackCount++
 			break
 		}
 	}
-	// fmt.Printf("attackSuccessNum: %d, attackCount: %d\n", attackSuccessNum, attackCount)
+	fmt.Printf("attackSuccessNum: %d, attackCount: %d\n", attackSuccessNum, attackCount)
 	house_sample = append(house_sample, float64(attackSuccessNum)/float64(attackCount))
-	// fmt.Println("house_sample:", house_sample)
+	fmt.Println("house_sample:", house_sample)
 }
 
 func attackParties(P []*party) (attackSuccessNum int) {
@@ -820,9 +827,10 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 
 func calculateStandardDeviation(numbers []float64) (float64, float64) {
 	if len(numbers) == 0 {
-		fmt.Println("Warning: numbers array is empty")
-		return 0, 0
+		fmt.Println("Debug: numbers array is empty before calculations")
+		return math.NaN(), 0.0 // Standard deviation is undefined for empty data
 	}
+
 	var sum float64
 	for _, num := range numbers {
 		sum += num
