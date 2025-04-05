@@ -6,14 +6,14 @@ datasets=(1 2)
 maxHouseholdsNumber=80
 
 # Create output directory
-output_dir="block_tests_text"
+output_dir="./blocksize_choices/block_tests_text"
 mkdir -p "$output_dir"
 sleep 5
 # Run Go program for each combination
 for dataset in "${datasets[@]}"; do
   for strategy in "${strategies[@]}"; do
-    echo "Running: go run ./test_blocks.go $strategy $dataset $maxHouseholdsNumber"
-    go run "./test_blocks.go" "$strategy" "$dataset" "$maxHouseholdsNumber"
+    echo "Running: go run ./blocksize_choices/test_blocks.go $strategy $dataset $maxHouseholdsNumber"
+    go run "./blocksize_choices/test_blocks.go" "$strategy" "$dataset" "$maxHouseholdsNumber"
     sleep 15
     # Move the expected output file to block_tests folder
     output_file="test_blocks_${strategy}_${dataset}_${maxHouseholdsNumber}.txt"

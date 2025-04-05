@@ -1,7 +1,7 @@
 /*
 *
-running command: // strategy, dataset, target, uniqueATD, encryptionRatio, maxHouseholdsNumber
-go run .\asr\test_asr.go 1 2 1 0 60 80
+running command: // strategy, dataset, target, uniqueATD, encryptionRatio, atdSize, maxHouseholdsNumber
+go run .\asr\test_asr.go 1 2 1 0 60 24 80
 */
 package main
 
@@ -86,9 +86,9 @@ const ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD = 2
 
 var atdSize = 24 // element number of unique attacker data
 var min_percent_matched = 100
-var max_attackLoop = 5
+var max_attackLoop = 10
 
-var maxHouseholdsNumber = 80
+var maxHouseholdsNumber int
 
 var NGoRoutine int = 1 // Default number of Go routines
 var encryptedSectionNum int
@@ -99,7 +99,7 @@ var currentStrategy int = 1 //Global(1), Household(2), Random(3)
 var currentDataset int = 1  //water(1),electricity(2)
 var uniqueATD int = 0       // unique attacker data, 1 for true, 0 for false
 var currentTarget = 2       //entropy(1),transition(2)
-var encryptionRatio int = 60
+var encryptionRatio int
 
 var transitionEqualityThreshold int
 var sectionNum int
@@ -128,12 +128,13 @@ func main() {
 		currentTarget = args[2]
 		uniqueATD = args[3]
 		encryptionRatio = args[4]
-		maxHouseholdsNumber = args[5]
+		atdSize = args[5]
+		maxHouseholdsNumber = args[6]
 	}
 
 	//write to file
-	str := "test_avg_asr_time"
-	fileName := fmt.Sprintf("%s_%d_%d_%d_%d_%d_%d.txt", str, currentStrategy, currentDataset, currentTarget, uniqueATD, encryptionRatio, maxHouseholdsNumber)
+	str := "ASR_time"
+	fileName := fmt.Sprintf("%s_%d_%d_%d_%d_%d_%d_%d.txt", str, currentStrategy, currentDataset, currentTarget, uniqueATD, encryptionRatio, atdSize, maxHouseholdsNumber)
 
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -171,11 +172,11 @@ func main() {
 		fmt.Println("Target: Transition based")
 	}
 
-	fmt.Println("SE threshold ", 0.01)
+	fmt.Println("Standard Error Threshold ", 0.01)
 	fmt.Println("Max Attack Loop: ", max_attackLoop)
-	fmt.Println("ATD Size: ", atdSize)
+	fmt.Println("Aggregated Time-series Data (ATD) Size i.e., leaked plaintext block size: ", atdSize)
 	fmt.Println("Number of Households: ", maxHouseholdsNumber)
-	fmt.Println("Encryption ratio: ", encryptionRatio, "%")
+	fmt.Println("Encryption Ratio: ", encryptionRatio, "%")
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
@@ -231,10 +232,11 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Printf("fileList:%d\n", len(fileList))
+	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
 	for percent := 100; percent >= 100; percent -= 10 { //TODO matching proportion
 		min_percent_matched = percent
-		fmt.Println("Households, ASR, Standard Error")
+		// fmt.Println("Households, ASR, Standard Error")
 		for selectedNum := 80; selectedNum <= 80; selectedNum += 5 {
 			maxHouseholdsNumber = selectedNum
 			var standard_error = 0.0
@@ -259,7 +261,9 @@ func main() {
 					}
 				}
 				process(randomFileList, params)
-				fmt.Println("Calling calculateStandardDeviation in main()")
+				if len(house_sample) == 0 {
+					fmt.Println("WARNING: No households selected. ASR calculations will fail.")
+				}
 				std, mean = calculateStandardDeviation(house_sample)
 				standard_error = std / math.Sqrt(float64(len(house_sample)))
 				if standard_error <= 0.01 && loop_count >= 100 {
@@ -272,8 +276,7 @@ func main() {
 	}
 
 	elapsedSeconds := elapsedTime.Seconds() / float64(max_attackLoop)
-	fmt.Printf("asr_enxteded encryption time: %.2f seconds\n", elapsedSeconds)
-
+	fmt.Printf("ASR encryption time: %.2f seconds\n", elapsedSeconds)
 	fmt.Printf("Main() Done in %s \n", time.Since(start))
 }
 
@@ -289,7 +292,6 @@ func process(fileList []string, params ckks.Parameters) {
 
 	startTime := time.Now()
 	for en := 0; en <= encryptedSectionNum; en++ {
-		fmt.Println("Encrypted section number:", en)
 		if currentStrategy == STRATEGY_GLOBAL {
 			_, entropyReduction, transitionReduction = markEncryptedSectionsByGlobal(en, P, entropySum, transitionSum)
 		} else if currentStrategy == STRATEGY_HOUSEHOLD {
@@ -300,9 +302,8 @@ func process(fileList []string, params ckks.Parameters) {
 		entropySum -= entropyReduction
 		transitionSum -= transitionReduction
 
-		if en == 6 {
-			fmt.Println("Encrypted section number:", en)
-			memberIdentificationAttack(P) //under current partial encryption
+		if en >= 0 {
+			memberIdentificationAttack(P)
 		}
 		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
 	}
@@ -319,20 +320,14 @@ func memberIdentificationAttack(P []*party) { //TODO:atd size
 		var successNum = attackParties(P)
 		attackSuccessNum += successNum
 		sample = append(sample, float64(successNum))
-		fmt.Println("Sample:", sample)
-		fmt.Println("Calling calculateStandardDeviation in memberIdentificationAttack")
 		std, _ = calculateStandardDeviation(sample)
-		fmt.Println("Standard deviation in memberIdentificationAttack:", std)
 		standard_error = std / math.Sqrt(float64(len(sample)))
-		fmt.Println("Standard error in memberIdentificationAttack:", standard_error)
 		if standard_error <= 0.01 && attackCount >= 100 {
 			attackCount++
 			break
 		}
 	}
-	fmt.Printf("attackSuccessNum: %d, attackCount: %d\n", attackSuccessNum, attackCount)
 	house_sample = append(house_sample, float64(attackSuccessNum)/float64(attackCount))
-	fmt.Println("house_sample:", house_sample)
 }
 
 func attackParties(P []*party) (attackSuccessNum int) {
@@ -714,8 +709,8 @@ func resizeCSV(filename string) []float64 {
 			panic(err)
 		}
 		elements = append(elements, fNum)
-	}
 
+	}
 	return elements
 }
 
@@ -826,11 +821,6 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 }
 
 func calculateStandardDeviation(numbers []float64) (float64, float64) {
-	if len(numbers) == 0 {
-		fmt.Println("Debug: numbers array is empty before calculations")
-		return math.NaN(), 0.0 // Standard deviation is undefined for empty data
-	}
-
 	var sum float64
 	for _, num := range numbers {
 		sum += num
