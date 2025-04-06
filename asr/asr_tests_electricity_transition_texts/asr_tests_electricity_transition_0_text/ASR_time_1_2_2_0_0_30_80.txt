@@ -1,0 +1,19 @@
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Strategy: Global Entropy High To Low
+Dataset: Electricity
+Unique Attacker Block: False
+Target: Transition based
+Standard Error Threshold  0.01
+Max Attack Loop:  10
+Aggregated Time-series Data (ATD) Size i.e., leaked plaintext block size:  30
+Number of Households:  80
+Encryption Ratio:  0 %
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+wd: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption
+path: examples\datasets\electricity\households_10240
+folder: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption\examples\datasets\electricity\households_10240
+fileList:80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Number of households: 80, mean ASR: 1.000, standard error: 0.000
+ASR encryption time: 1.50 seconds
+Main() Done in 18.6857679s 

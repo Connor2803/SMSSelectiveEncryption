@@ -3,8 +3,8 @@ import re
 import matplotlib.pyplot as plt
 
 # Directories
-input_folder = './asr_tests_electricity_entropy_texts/asr_tests_electricity_entropy_0_text'
-output_path = './asr_electricity_line_graphs/electricity_entropy-based/asr_electricity_entropy_0_line_graph.png'
+input_folder = './asr_tests_electricity_transition_texts/asr_tests_electricity_transition_0_text'
+output_path = './asr_electricity_line_graphs/electricity_transition-based/asr_electricity_transition_0_line_graph.png'
 
 # Strategy colour map
 strategy_colours = {
