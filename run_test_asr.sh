@@ -5,17 +5,17 @@
 
 # Define possible values for parameters
 strategies=(1 2 3) # 1 = global, 2 = household, 3 = random
-dataset=1 # 1 = water, 2 = electricity
+dataset=2 # 1 = water, 2 = electricity
 target=1 # 1 = entropy, 2 = transition
-uniqueATDbool=0
+uniqueATDbool=0 # 1 = true, 0 = false
 encryptionRatio=0 # range between 0 - 100, in 20 integer increments
 atdSizes=(3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48)
 maxHouseholdsNumber=80
 
 # Create output directory
-output_dir="./asr/asr_tests_water_entropy_0_text"
+output_dir="./asr/asr_tests_water_entropy_texts/asr_tests_electricity_entropy_0_text"
 mkdir -p "$output_dir"
-sleep 5  # Sleep for 5 seconds before starting
+sleep 5
 
 # Run Go program for each combination
 for strategy in "${strategies[@]}"; do

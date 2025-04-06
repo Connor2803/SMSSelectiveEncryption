@@ -1,0 +1,19 @@
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Strategy: Household Entropy High To Low
+Dataset: Water
+Unique Attacker Block: False
+Target: Entropy based
+Standard Error Threshold  0.01
+Max Attack Loop:  10
+Aggregated Time-series Data (ATD) Size i.e., leaked plaintext block size:  12
+Number of Households:  80
+Encryption Ratio:  40 %
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+wd: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption
+path: examples\datasets\water\households_10240
+folder: C:\Users\mohan\GolandProjects\SMSSelectiveEncryption\examples\datasets\water\households_10240
+fileList:80
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Number of households: 80, mean ASR: 0.582, standard error: 0.029
+ASR encryption time: 4.65 seconds
+Main() Done in 51.5616167s 
