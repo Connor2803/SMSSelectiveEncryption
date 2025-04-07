@@ -15,24 +15,30 @@ The code is running on Windows platform, and not tested on Linux or Mac.
 
 ### Testing performance among different block size choices
 ```bash
-go run .\blocksize_choices\test_blocks.go 1 1 80
+$ go run .\blocksize_choices\test_blocks.go 1 1 80
 ```
 Params meaning: strategy, dataset, maxHouseholdsNumber
 
+Testcase meaning: Calculate block size performance for 80 households in the Water dataset using the Global encryption strategy
+
 ### Testing privacy metrics like entropy, transition
 ```bash
-go run .\privacy_metrics\test_metrics.go 1 1 1 80
+$ go run .\privacy_metrics\test_metrics.go 1 1 1 80
 ```
 Params meaning: strategy, dataset, target, maxHouseholdsNumber
 
+Testcase meaning: Calculate block size performance for 80 households in the Water dataset using the Global encryption strategy and Entropy-based selection strategy
+
 ### Testing attack success rate based on entropy or transition
 ```bash
-go run .\asr\test_asr.go 1 2 0 1 60 80
+$ go run .\asr\test_asr.go 1 1 1 0 60 24 80
 ```
-Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber
+Params meaning: strategy, dataset, target, uniqueATD, encryptionRatio, atdSize, maxHouseholdsNumber
+
+Testcase meaning: Calculate the ASR for 80 households in the Water dataset, that is 80% encrypted, using the Global encryption strategy, Entropy-based selection strategy, and non-unique attacker data block
 
 ### Testing attack success rate based on data uniqueness
 ```bash
-go run .\asr_uniqueness\test_uniqueness.go 1 2 0 1 60 20
+$ go run .\asr_uniqueness\test_uniqueness.go 1 2 0 1 60 20
 ```
 Params meaning: strategy, dataset, uniqueATD, target, encryptionRatio, maxHouseholdsNumber

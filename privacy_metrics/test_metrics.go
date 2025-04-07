@@ -202,12 +202,12 @@ func main() {
 	}
 
 	var pathFormat string
+	var path string
 	if strings.Contains(wd, "examples") {
 		pathFormat = filepath.Join("..", "..", "..", "examples", "datasets", "%s", "households_%d")
 	} else {
 		pathFormat = filepath.Join("examples", "datasets", "%s", "households_%d")
 	}
-	var path string
 	if currentDataset == DATASET_WATER {
 		path = fmt.Sprintf(pathFormat, "water", MAX_PARTY_ROWS)
 		transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
@@ -217,6 +217,10 @@ func main() {
 	}
 
 	folder := filepath.Join(wd, path)
+	fmt.Println("wd:", wd)
+	fmt.Println("path:", path)
+	fmt.Println("folder:", folder)
+
 	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println(err)
@@ -232,6 +236,8 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Printf("fileList:%d\n", len(fileList))
+
 	process(fileList[:maxHouseholdsNumber], params)
 
 	fmt.Printf("Main() Done in %s \n", time.Since(start))

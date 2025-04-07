@@ -57,4 +57,4 @@ standardError: 0.000, 0.000
 threshold = 1.0, entropy/transition remain = 0.000,0.000
 standardError: 0.000, 0.000
 ***** Evaluating Summation/Deviation time for 80 households in thirdparty analyst's side: 85.80725ms,171.5434ms
-Main() Done in 10.1646962s 
+Main() Done in 10.1646962s
