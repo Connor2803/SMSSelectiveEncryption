@@ -678,28 +678,37 @@ func markEncryptedSectionsByHousehold(en int, P []*party, entropySum, transition
 	return
 }
 
+var thresholdCount int = 0
+var thresholdAverage float64 = 1.0
+
 func markEncryptedSectionsByThreshold(P []*party) {
 	for _, po := range P {
 		po.input = make([][]float64, 0)
 		po.plainInput = make([]float64, 0)
 		po.encryptedInput = make([]float64, 0)
+		thresholdCount = thresholdCount + 1
 
 		k := 0
 		for j := 0; j < globalPartyRows; j++ {
+			thresholdAverage = ((thresholdAverage * (float64(thresholdCount-1) / float64(thresholdCount))) + po.rawInput[j]) / float64(thresholdCount)
 			if j%sectionSize == 0 {
 				po.input = append(po.input, make([]float64, sectionSize))
 				k++
 			}
 
-			if po.rawInput[j] > 0.5 { // Encrypt values over 50
+			if po.rawInput[j] > thresholdAverage { // Encrypt values over running average
 				po.input[k-1][j%sectionSize] = po.rawInput[j]
-				po.encryptedInput = append(po.encryptedInput, -0.1) // Encrypted placeholder
+				po.encryptedInput = append(po.encryptedInput, -0.1)
 			} else {
 				po.plainInput = append(po.plainInput, po.rawInput[j])
 				po.encryptedInput = append(po.encryptedInput, po.rawInput[j])
 			}
 		}
+		// Reset values for next party
+		thresholdAverage = 1.0
+		thresholdCount = 0
 	}
+	//println("Threshold Average: ", thresholdAverage)
 }
 
 func genparties(params ckks.Parameters, fileList []string) []*party {
