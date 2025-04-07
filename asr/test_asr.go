@@ -99,7 +99,7 @@ var currentStrategy int = 1 //Global(1), Household(2), Random(3)
 var currentDataset int = 1  //water(1),electricity(2)
 var uniqueATD int = 0       // unique attacker data, 1 for true, 0 for false
 var currentTarget = 2       //entropy(1),transition(2)
-var encryptionRatio int
+var encryptionRatio int = 40
 
 var transitionEqualityThreshold int
 var sectionNum int
@@ -298,9 +298,9 @@ func process(fileList []string, params ckks.Parameters) {
 		entropySum -= entropyReduction
 		transitionSum -= transitionReduction
 
-		// if en == 6 {
-		// 	memberIdentificationAttack(P) //under current partial encryption
-		// }
+		if en == 6 {
+			memberIdentificationAttack(P) //under current partial encryption
+		}
 		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
 	}
 	elapsedTime += time.Since(startTime)

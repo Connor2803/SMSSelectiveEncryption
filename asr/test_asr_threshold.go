@@ -157,7 +157,7 @@ func main() {
 	} else if currentStrategy == STRATEGY_RANDOM {
 		fmt.Println("Strategy: Random")
 	} else if currentStrategy == STRATEGY_THRESHOLD {
-		fmt.Println("Strategy: Encrypt Values Over 50")
+		fmt.Println("Strategy: Threshold")
 	}
 	if currentDataset == DATASET_WATER {
 		fmt.Println("Dataset: Water")

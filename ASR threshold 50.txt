@@ -1,5 +1,5 @@
 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Strategy: Encrypt Values Over 50
+Strategy: Threshold
 Dataset: Electricity
 Unique Attacker Block: False
 Target: Entropy based
