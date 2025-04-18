@@ -1,5 +1,4 @@
 /*
-*
 running command: // strategy, dataset, target, maxHouseholdsNumber
 go run .\privacy_metrics\test_metrics.go 1 1 1 80
 */
