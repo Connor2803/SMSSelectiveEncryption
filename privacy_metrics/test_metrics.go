@@ -1,10 +1,12 @@
 /*
 running command: // strategy, dataset, target, maxHouseholdsNumber
 go run .\privacy_metrics\test_metrics.go 1 1 1 80
+test_metrics.go Global, Water, Entropy, 80
 */
 package main
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	utils "lattigo"
@@ -78,13 +80,15 @@ type party struct {
 	rtgShare    *drlwe.RTGShare
 	pcksShare   *drlwe.PCKSShare
 
-	rawInput   []float64   //all data
-	input      [][]float64 //data of encryption
-	plainInput []float64   //data of plain
-	flag       []int
-	group      []int
-	entropy    []float64 //entropy for block
-	transition []float64
+	rawInput    []float64   //all data
+	timestamps  []string    // date and time data for each reading
+	input       [][]float64 //data of encryption
+	plainInput  []float64   //data of plain
+	flag        []int
+	group       []int
+	entropy     []float64 //current entropy for block
+	originalEnt []float64 // entropy before any encryption for block
+	transition  []float64
 }
 
 type task struct {
@@ -93,6 +97,20 @@ type task struct {
 	op2         *rlwe.Ciphertext
 	res         *rlwe.Ciphertext
 	elapsedtask time.Duration
+}
+
+type Section struct {
+	HouseholdID                string
+	FirstEntryMeterReadingDate string
+	FirstEntryMeterReadingTime string
+	SectionNumber              int
+	EncryptionRatio            float64
+	RawEntropy                 float64
+	RemainingEntropy           float64
+	TPASummationTime           float64 // in seconds
+	TPADeviationTime           float64 // in seconds
+	TPASummationSD             float64
+	TPADeviationSD             float64
 }
 
 const STRATEGY_GLOBAL = 1
@@ -121,6 +139,7 @@ var currentTarget = 2   //entropy(1),transition(2)
 
 var transitionEqualityThreshold int
 var sectionNum int
+var usedRandomStartPartyPairs = map[int][]int{}
 
 func main() {
 	var args []int
@@ -248,6 +267,13 @@ func process(fileList []string, params ckks.Parameters) {
 	// Create each party, and allocate the memory for all the shares that the protocols will need
 	P := genparties(params, fileList)
 
+	var sections []Section
+	sectionKey := func(householdID string, sectionIdx int) string {
+		return householdID + ":" + strconv.Itoa(sectionIdx)
+	}
+
+	sectionMap := make(map[string]*Section)
+
 	//getInputs read the data file
 	// Inputs & expected result, cleartext result
 	expSummation, expAverage, expDeviation, min, max, entropySum, transitionSum := genInputs(P)
@@ -269,6 +295,31 @@ func process(fileList []string, params ckks.Parameters) {
 
 		if currentStrategy == STRATEGY_GLOBAL {
 			plainSum, entropyReduction, transitionReduction = markEncryptedSectionsByGlobal(en, P, entropySum, transitionSum)
+			for _, party := range P {
+				//if len(party.entropy) <= en {
+				//	continue
+				//}
+				for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+					timestamp := strings.Split(party.timestamps[sectionIdx*sectionSize], ",")
+					date := timestamp[0]
+					time := timestamp[1]
+
+					section := &Section{
+						HouseholdID:                filepath.Base(party.filename),
+						FirstEntryMeterReadingDate: date,
+						FirstEntryMeterReadingTime: time,
+						SectionNumber:              sectionIdx,
+						EncryptionRatio:            float64(en+1) / float64(encryptedSectionNum),
+						RawEntropy:                 party.originalEnt[sectionIdx],
+						RemainingEntropy:           party.entropy[sectionIdx],
+					}
+					key := sectionKey(section.HouseholdID, section.SectionNumber)
+					sectionMap[key] = section
+				}
+			}
+			//} else if == STRATEGY_GLOBAL_REVERSE {
+			//	plainSum, entropyReduction, transitionReduction = markEncryptedSectionsByGlobalReverse(en, P, entropySum, transitionSum)
+			//}
 		} else if currentStrategy == STRATEGY_HOUSEHOLD {
 			plainSum, entropyReduction, transitionReduction = markEncryptedSectionsByHousehold(en, P, entropySum, transitionSum)
 		} else { //STRATEGY_RANDOM
@@ -286,8 +337,11 @@ func process(fileList []string, params ckks.Parameters) {
 		// var summationSample = []float64{}
 		// var DeviationSample = []float64{}
 		performanceLoop := 1
-		elapsedSummation = 0.0
-		elapsedDeviation = 0.0
+		var elapsedSummation float64
+		var elapsedDeviation float64
+		var summationStandardDeviation float64
+		var varianceStandardDeviation float64
+
 		for ; performanceLoop <= PERFORMANCE_LOOPS; performanceLoop++ {
 			// elapsedSummation = 0.0
 			// elapsedDeviation = 0.0
@@ -308,8 +362,34 @@ func process(fileList []string, params ckks.Parameters) {
 		// performance prints
 		// elapsedSummation = tmpTimeSummation
 		// elapsedDeviation = tmpTimeDeviation
-		showHomomorphicMeasure(performanceLoop, params)
+		elapsedSummation, elapsedDeviation, summationStandardDeviation, varianceStandardDeviation = showHomomorphicMeasure(performanceLoop, params)
+		for _, party := range P {
+			for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+				key := sectionKey(filepath.Base(party.filename), sectionIdx)
+				if section, ok := sectionMap[key]; ok {
+					section.TPASummationTime = elapsedSummation
+					section.TPADeviationTime = elapsedDeviation
+					section.TPASummationSD = summationStandardDeviation
+					section.TPADeviationSD = varianceStandardDeviation
+				}
+			}
+		}
+
+		for _, section := range sectionMap {
+			sections = append(sections, *section)
+		}
 	}
+	strategy := getStrategyName(currentStrategy)
+	dataset := getDatasetName(currentDataset)
+
+	err := writeSectionsToCSV(strategy, dataset, sections)
+	if err != nil {
+		fmt.Println("Failed to write CSV:", err)
+	}
+	for i := 0; i < maxHouseholdsNumber; i++ {
+		fmt.Println("Household:", P[i].filename, "Flags:", P[i].flag)
+	}
+
 }
 
 func memberIdentificationAttack(P []*party) {
@@ -428,6 +508,10 @@ func markEncryptedSectionsByRandom(en int, P []*party, entropySum, transitionSum
 	return
 }
 
+/*
+This function applies the current encryption ratio to the section with the highest base entropy value across all parties that hasn't already been encrypted.
+This means that high-entropy sections are encrypted earlier, but with lower encryption ratios. It aims to equalise the remaining entropy across all sections and parties.
+*/
 func markEncryptedSectionsByGlobal(en int, P []*party, entropySum, transitionSum float64) (plainSum []float64, entropyReduction float64, transitionReduction float64) {
 
 	entropyReduction = 0.0
@@ -456,9 +540,73 @@ func markEncryptedSectionsByGlobal(en int, P []*party, entropySum, transitionSum
 		P[pIndex].flag[sIndex] = 1
 		entropyReduction += P[pIndex].entropy[sIndex]
 		transitionReduction += P[pIndex].transition[sIndex]
+		encryptionRatio := float64(encryptedSectionNum-en) / float64(encryptedSectionNum)
+		P[pIndex].entropy[sIndex] *= (1 - encryptionRatio)
+
 	}
 	// fmt.Println("----------------------------------------------->")
-	fmt.Printf("threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(en+1)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
+	fmt.Printf("encryptionRatio/threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(encryptedSectionNum-en)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
+
+	//for each threshold, prepare plainInput&input
+	for pi, po := range P {
+		po.input = make([][]float64, 0)
+		po.plainInput = make([]float64, 0)
+		k := 0
+		for j := 0; j < globalPartyRows; j++ {
+			if j%sectionSize == 0 && po.flag[j/sectionSize] == 1 {
+				po.input = append(po.input, make([]float64, sectionSize))
+				k++
+			}
+
+			if po.flag[j/sectionSize] == 1 {
+				po.input[k-1][j%sectionSize] = po.rawInput[j]
+			} else {
+				plainSum[pi] += po.rawInput[j]
+				po.plainInput = append(po.plainInput, po.rawInput[j])
+			}
+		}
+	}
+	return
+}
+
+/*
+This function applies the highest available encryption ratio to the section with the highest base entropy value across all parties that hasn't already been encrypted.
+This means that high-entropy sections are encrypted earlier, but with the highest encryption ratios.
+*/
+func markEncryptedSectionsByGlobalReverse(en int, P []*party, entropySum, transitionSum float64) (plainSum []float64, entropyReduction float64, transitionReduction float64) {
+
+	entropyReduction = 0.0
+	transitionReduction = 0
+	plainSum = make([]float64, len(P))
+	var targetArr []float64
+
+	for k := 0; k < len(P); k++ {
+		max := -1.0
+		sIndex := -1
+		pIndex := -1
+		for pi, po := range P {
+			if currentTarget == 1 {
+				targetArr = po.entropy
+			} else {
+				targetArr = po.transition
+			}
+			for si := 0; si < sectionNum; si++ {
+				if po.flag[si] != 1 && targetArr[si] > max {
+					max = targetArr[si]
+					sIndex = si
+					pIndex = pi
+				}
+			}
+		}
+		P[pIndex].flag[sIndex] = 1
+		entropyReduction += P[pIndex].entropy[sIndex]
+		transitionReduction += P[pIndex].transition[sIndex]
+		encryptionRatio := float64(en+1) / float64(encryptedSectionNum)
+		P[pIndex].entropy[sIndex] *= (1 - encryptionRatio)
+
+	}
+	// fmt.Println("----------------------------------------------->")
+	fmt.Printf("encryptionRatio/threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(en+1)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
 
 	//for each threshold, prepare plainInput&input
 	for pi, po := range P {
@@ -531,11 +679,26 @@ func markEncryptedSectionsByHousehold(en int, P []*party, entropySum, transition
 	return
 }
 
-func showHomomorphicMeasure(loop int, params ckks.Parameters) {
+func showHomomorphicMeasure(loop int, params ckks.Parameters) (float64, float64, float64, float64) {
 
 	// fmt.Println("1~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 	fmt.Printf("standardError: %.3f, %.3f\n", standardErrorSummation, standardErrorDeviation)
 	fmt.Printf("***** Evaluating Summation/Deviation time for %d households in thirdparty analyst's side: %s,%s\n", maxHouseholdsNumber, time.Duration(elapsedSummation.Nanoseconds()/int64(loop)), time.Duration(elapsedDeviation.Nanoseconds()/int64(loop)))
+
+	totalSections := float64(sectionNum * maxHouseholdsNumber)
+
+	totalSummationTimeNs := elapsedSummation.Nanoseconds()
+	totalDeviationTimeNs := elapsedDeviation.Nanoseconds()
+
+	avgSummationTime := float64(totalSummationTimeNs) / float64(loop) / 1e9 // 1e9 converts nanoseconds to seconds
+	avgDeviationTime := float64(totalDeviationTimeNs) / float64(loop) / 1e9
+
+	elapsedSummationPerSection := avgSummationTime / totalSections
+	elapsedDeviationPerSection := avgDeviationTime / totalSections
+	standardErrorSummationPerSection := standardErrorSummation / totalSections
+	standardErrorDeviationPerSection := standardErrorDeviation / totalSections
+
+	return elapsedSummationPerSection, elapsedDeviationPerSection, standardErrorSummationPerSection, standardErrorDeviationPerSection
 
 	// fmt.Println("2~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
@@ -552,10 +715,10 @@ func showHomomorphicMeasure(loop int, params ckks.Parameters) {
 	// fmt.Printf("*****Amortized Ciphertext Multiplication Time: %s\n", time.Duration(elapsedMultiplication.Nanoseconds()/int64(loop)))
 	// fmt.Printf("*****Amortized Ciphertext Rotation Time: %s\n", time.Duration(elapsedRotation.Nanoseconds()/int64(loop*len(params.GaloisElementsForRowInnerSum()))))
 
-	// fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystSummation.Nanoseconds()/int64(loop)))
-	// fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystVariance.Nanoseconds()/int64(loop)))
+	//fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystSummation.Nanoseconds()/int64(loop)))
+	//fmt.Printf("*****Amortized Analyst Time: %s\n", time.Duration(elapsedAnalystVariance.Nanoseconds()/int64(loop)))
 
-	// PrintMemUsage()
+	//PrintMemUsage()
 }
 
 func doHomomorphicOperations(params ckks.Parameters, P []*party, expSummation, expAverage, expDeviation, plainSum []float64) {
@@ -786,10 +949,12 @@ func ReadCSV(path string) []string {
 }
 
 // trim csv
-func resizeCSV(filename string) []float64 {
+func resizeCSV(filename string) ([]float64, []string) {
 	csv := ReadCSV(filename)
 
 	elements := []float64{}
+	timestamps := []string{}
+
 	for _, v := range csv {
 		slices := strings.Split(v, ",")
 		tmpStr := strings.TrimSpace(slices[len(slices)-1])
@@ -798,9 +963,21 @@ func resizeCSV(filename string) []float64 {
 			panic(err)
 		}
 		elements = append(elements, fNum)
+		timestamp := strings.Join(slices[:len(slices)-1], ",")
+		timestamps = append(timestamps, timestamp)
 	}
 
-	return elements
+	// If currentDataset is water, reverse the slices to fix reverse chronological order
+	if currentDataset == 1 {
+		for i, j := 0, len(elements)-1; i < j; i, j = i+1, j-1 {
+			elements[i], elements[j] = elements[j], elements[i]
+		}
+		for i, j := 0, len(timestamps)-1; i < j; i, j = i+1, j-1 {
+			timestamps[i], timestamps[j] = timestamps[j], timestamps[i]
+		}
+	}
+
+	return elements, timestamps
 }
 
 func getRandom(numberRange int) (randNumber int) {
@@ -844,7 +1021,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 	entropySum = 0.0
 	transitionSum = 0
 	for pi, po := range P {
-		partyRows := resizeCSV(po.filename)
+		partyRows, timestamps := resizeCSV(po.filename)
 		lenPartyRows := len(partyRows)
 		if lenPartyRows > MAX_PARTY_ROWS {
 			lenPartyRows = MAX_PARTY_ROWS
@@ -866,9 +1043,11 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 		}
 
 		po.rawInput = make([]float64, globalPartyRows)
+		po.timestamps = timestamps
 
 		po.flag = make([]int, sectionNum)
 		po.entropy = make([]float64, sectionNum)
+		po.originalEnt = make([]float64, sectionNum)
 		po.transition = make([]float64, sectionNum)
 		po.group = make([]int, sectionSize)
 
@@ -904,6 +1083,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 		for i := range po.rawInput {
 			singleRecordEntropy := entropyMap[po.rawInput[i]] / float64(frequencyMap[po.rawInput[i]])
 			po.entropy[i/sectionSize] += singleRecordEntropy
+			po.originalEnt[i/sectionSize] += singleRecordEntropy
 			entropySum += singleRecordEntropy
 			if i > 0 && !almostEqual(po.rawInput[i], po.rawInput[i-1]) {
 				po.transition[i/sectionSize] += 1
@@ -974,4 +1154,70 @@ func calculateStandardDeviation(numbers []float64) float64 {
 	standardDeviation := math.Sqrt(variance)
 
 	return standardDeviation
+}
+
+func writeSectionsToCSV(strategy, dataset string, sections []Section) error {
+	fileName := fmt.Sprintf("metrics_%s_%s.csv", strategy, dataset)
+	filePath := filepath.Join(".", fileName)
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	headers := []string{
+		"Household ID", "First Entry Meter Reading Date", "First Entry Meter Reading Time", "Section Number",
+		"Encryption Ratio", "Raw Section Entropy", "Remaining Section Entropy", "Third Party Analyst Summation Time (s)", "Third Party Analyst Deviation/Variance Time (s)",
+		"Third Party Analyst Summation Standard Deviation", "Third Party Analyst Deviation/Variance Standard Deviation",
+	}
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write headers: %w", err)
+	}
+
+	for _, section := range sections {
+		record := []string{
+			section.HouseholdID,
+			section.FirstEntryMeterReadingDate,
+			section.FirstEntryMeterReadingTime,
+			strconv.Itoa(section.SectionNumber),
+			fmt.Sprintf("%.2f", section.EncryptionRatio),
+			fmt.Sprintf("%.4f", section.RawEntropy),
+			fmt.Sprintf("%.4f", section.RemainingEntropy),
+			fmt.Sprintf("%.6f", section.TPASummationTime),
+			fmt.Sprintf("%.6f", section.TPADeviationTime),
+			fmt.Sprintf("%.3f", section.TPASummationSD),
+			fmt.Sprintf("%.3f", section.TPADeviationSD),
+		}
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write section: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func getStrategyName(strategy int) string {
+	switch strategy {
+	case STRATEGY_GLOBAL:
+		return "Global"
+	case STRATEGY_HOUSEHOLD:
+		return "Household"
+	default:
+		return "Random"
+	}
+}
+
+func getDatasetName(dataset int) string {
+	switch dataset {
+	case DATASET_WATER:
+		return "Water"
+	case DATASET_ELECTRICITY:
+		return "Electricity"
+	default:
+		return "Unknown"
+	}
 }
