@@ -1,6 +1,6 @@
 /*
-running command: // strategy, dataset, target, maxHouseholdsNumber
-go run .\privacy_metrics\test_metrics.go 1 1 1 80
+running command: // strategy, dataset, target, maxHouseholdsNumber, uniqueATD, atdSize
+go run .\privacy_metrics\test_metrics.go 1 1 1 80 0 24
 test_metrics.go Global, Water, Entropy, 80
 */
 package main
@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -80,15 +81,16 @@ type party struct {
 	rtgShare    *drlwe.RTGShare
 	pcksShare   *drlwe.PCKSShare
 
-	rawInput    []float64   //all data
-	timestamps  []string    // date and time data for each reading
-	input       [][]float64 //data of encryption
-	plainInput  []float64   //data of plain
-	flag        []int
-	group       []int
-	entropy     []float64 //current entropy for block
-	originalEnt []float64 // entropy before any encryption for block
-	transition  []float64
+	rawInput       []float64   //all data
+	input          [][]float64 //data of encryption
+	plainInput     []float64   //data of plain
+	encryptedInput []float64   //encrypted data of raw (encrypted value are -0.1)
+	flag           []int
+	group          []int
+	entropy        []float64 //current entropy for block
+	originalEnt    []float64 // entropy before any encryption for block
+	transition     []float64
+	timestamps     []string // date and time data for each reading
 }
 
 type task struct {
@@ -135,11 +137,19 @@ const sectionSize = 1024     //block size, 2048 for summation correctness, 8192 
 
 var currentDataset = 1  //water(1),electricity(2)
 var currentStrategy = 1 //Global(1), Household(2), Random(3)
+var uniqueATD int = 0   // unique attacker data, 1 for true, 0 for false
 var currentTarget = 2   //entropy(1),transition(2)
 
 var transitionEqualityThreshold int
 var sectionNum int
+
+var atdSize = 24 // element number of unique attacker data
+var min_percent_matched = 100
+var max_attackLoop = 10
 var usedRandomStartPartyPairs = map[int][]int{}
+var house_sample = []float64{}
+
+var elapsedTime time.Duration
 
 func main() {
 	var args []int
@@ -158,6 +168,8 @@ func main() {
 		currentDataset = args[1]
 		currentTarget = args[2]
 		maxHouseholdsNumber = args[3]
+		uniqueATD = args[4]
+		atdSize = args[5]
 	}
 
 	//write to file
@@ -194,7 +206,15 @@ func main() {
 	} else {
 		fmt.Println("Target: Transition based")
 	}
-	fmt.Println("Performance Loop: ", PERFORMANCE_LOOPS)
+	if uniqueATD == 0 {
+		fmt.Println("Unique Attacker Block: False")
+	} else {
+		fmt.Println("Unique Attacker Block: True")
+	}
+	fmt.Println("Performance Loops: ", PERFORMANCE_LOOPS)
+	fmt.Println("Standard Error Threshold ", 0.01)
+	fmt.Println("Max Attack Loop: ", max_attackLoop)
+	fmt.Println("Aggregated Time-series Data (ATD) Size i.e., leaked plaintext block size: ", atdSize)
 	fmt.Println("Number of Households: ", maxHouseholdsNumber)
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -256,9 +276,48 @@ func main() {
 	}
 	fmt.Printf("fileList:%d\n", len(fileList))
 
-	process(fileList[:maxHouseholdsNumber], params)
-
 	fmt.Printf("Main() Done in %s \n", time.Since(start))
+
+	for percent := 100; percent >= 100; percent -= 10 { //TODO matching proportion
+		min_percent_matched = percent
+		// fmt.Println("Households, ASR, Standard Error")
+		for selectedNum := 80; selectedNum <= 80; selectedNum += 5 {
+			maxHouseholdsNumber = selectedNum
+			var standard_error = 0.0
+			var std = 0.0
+			var mean = 0.0
+			house_sample = []float64{}
+			for loop_count := 0; loop_count < max_attackLoop; loop_count++ {
+				var randomFileList []string
+				if maxHouseholdsNumber == 80 {
+					randomFileList = fileList
+				} else {
+					tmpHouseIDs := make([]int, maxHouseholdsNumber)
+					for i := 0; i < maxHouseholdsNumber; i++ {
+						tmpHouseIDs[i] = i
+					}
+
+					randomFileList = []string{}
+					for index := 0; index < maxHouseholdsNumber; index++ {
+						r := getRandom(maxHouseholdsNumber - index)
+						randomFileList = append(randomFileList, fileList[tmpHouseIDs[r]])
+						tmpHouseIDs[r] = tmpHouseIDs[maxHouseholdsNumber-1-index]
+					}
+				}
+				process(fileList[:maxHouseholdsNumber], params)
+				if len(house_sample) == 0 {
+					fmt.Println("WARNING: No households selected. ASR calculations will fail.")
+				}
+				std, mean = calculateStandardDeviationandMean(house_sample)
+				standard_error = std / math.Sqrt(float64(len(house_sample)))
+				if standard_error <= 0.01 && loop_count >= 100 {
+					loop_count++
+					break
+				}
+			}
+			fmt.Printf("Number of households: %d, mean ASR: %.3f, standard error: %.3f\n", maxHouseholdsNumber, mean, standard_error)
+		}
+	}
 }
 
 // main start
@@ -290,15 +349,13 @@ func process(fileList []string, params ckks.Parameters) {
 	var plainSum []float64
 	var entropyReduction float64
 	var transitionReduction float64
-	for en := 0; en < encryptedSectionNum; en++ {
-		// fmt.Printf("------------------------------------------encryptedSectionNum = %d\n", en)
 
+	startTime := time.Now()
+
+	for en := 0; en < encryptedSectionNum; en++ {
 		if currentStrategy == STRATEGY_GLOBAL {
 			plainSum, entropyReduction, transitionReduction = markEncryptedSectionsByGlobal(en, P, entropySum, transitionSum)
 			for _, party := range P {
-				//if len(party.entropy) <= en {
-				//	continue
-				//}
 				for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
 					timestamp := strings.Split(party.timestamps[sectionIdx*sectionSize], ",")
 					date := timestamp[0]
@@ -328,14 +385,13 @@ func process(fileList []string, params ckks.Parameters) {
 		entropySum -= entropyReduction
 		transitionSum -= transitionReduction
 
-		// fmt.Printf("<<<beging---encryptedSectionNum = [%d]\n", en)
-
-		// memberIdentificationAttack(P) //under current partial encryption
+		// Simulate attack
+		if en >= 6 {
+			memberIdentificationAttack(P)
+		}
+		usedRandomStartPartyPairs = map[int][]int{} //clear map for the next loop
 
 		//HE performance by loops
-
-		// var summationSample = []float64{}
-		// var DeviationSample = []float64{}
 		performanceLoop := 1
 		var elapsedSummation float64
 		var elapsedDeviation float64
@@ -343,8 +399,6 @@ func process(fileList []string, params ckks.Parameters) {
 		var varianceStandardDeviation float64
 
 		for ; performanceLoop <= PERFORMANCE_LOOPS; performanceLoop++ {
-			// elapsedSummation = 0.0
-			// elapsedDeviation = 0.0
 			// fmt.Printf("<<<performanceLoop = [%d], encryptedSectionNum = [%d]\n", performanceLoop, en)
 			doHomomorphicOperations(params, P, expSummation, expAverage, expDeviation, plainSum)
 			// summationSample = append(summationSample, float64(elapsedSummation))
@@ -374,10 +428,12 @@ func process(fileList []string, params ckks.Parameters) {
 				}
 			}
 		}
+	}
 
-		for _, section := range sectionMap {
-			sections = append(sections, *section)
-		}
+	elapsedTime += time.Since(startTime)
+
+	for _, section := range sectionMap {
+		sections = append(sections, *section)
 	}
 	strategy := getStrategyName(currentStrategy)
 	dataset := getDatasetName(currentDataset)
@@ -386,81 +442,210 @@ func process(fileList []string, params ckks.Parameters) {
 	if err != nil {
 		fmt.Println("Failed to write CSV:", err)
 	}
-	for i := 0; i < maxHouseholdsNumber; i++ {
-		fmt.Println("Household:", P[i].filename, "Flags:", P[i].flag)
-	}
-
 }
 
-func memberIdentificationAttack(P []*party) {
+func memberIdentificationAttack(P []*party) { //TODO:atd size
 	var attackSuccessNum int
-	for a := 0; a < attackLoop; a++ {
-		attackSuccessNum += attackParties(P)
-	}
-	fmt.Printf("<<<<<<<<<<<EncryptedSectionNum = %v, ASR = %.3f\n", encryptedSectionNum, float64(attackSuccessNum)/float64(attackLoop))
-}
-
-func attackParties(P []*party) (attackSuccessNum int) {
-	// fmt.Println("starting attack>>>>>>>>>>>>>")
-	attackSuccessNum = 0
-	randomParty := getRandom(maxHouseholdsNumber)
-	randomStart := getRandom(MAX_PARTY_ROWS - sectionSize)
-	// fmt.Printf("attackering at Party[%d], position[%d]\n", randomParty, randomStart)
-
-	var leftArr []float64
-	var rightArr []float64
-	for k := 1; k < sectionSize-1; k++ {
-		leftArr = make([]float64, 0)
-		rightArr = make([]float64, 0)
-		// fmt.Printf("<<pos: %d; ", k)
-		var tmpParties []*party
-		//search with left part
-		for i := 0; i < k; i++ {
-			leftArr = append(leftArr, P[randomParty].rawInput[i+randomStart])
-		}
-		tmpParties = filterParties(P, leftArr)
-
-		if len(tmpParties) == 0 {
-			tmpParties = P
-		}
-
-		//search with right part
-		for j := k; j < sectionSize; j++ {
-			rightArr = append(rightArr, P[randomParty].rawInput[j+randomStart])
-		}
-		tmpParties = filterParties(tmpParties, rightArr)
-		if len(tmpParties) == 1 {
-			attackSuccessNum = 1
-			// fmt.Printf("!!!!!!!!Success with party file[%s]\n", filepath.Base(tmpParties[0].filename))
+	var attackCount int
+	var sample = []float64{}
+	var std float64
+	var standard_error float64
+	for attackCount = 0; attackCount < max_attackLoop; attackCount++ {
+		var successNum = attackParties(P)
+		attackSuccessNum += successNum
+		sample = append(sample, float64(successNum))
+		std, _ = calculateStandardDeviationandMean(sample)
+		standard_error = std / math.Sqrt(float64(len(sample)))
+		if standard_error <= 0.01 && attackCount >= 100 {
+			attackCount++
 			break
 		}
 	}
-	// fmt.Println("ending attack#############")
+	house_sample = append(house_sample, float64(attackSuccessNum)/float64(attackCount))
+}
+
+func attackParties(P []*party) (attackSuccessNum int) {
+	// Generate a leaked data block and simulate attack
+	attackSuccessNum = 0
+
+	var valid = false
+	var randomParty int
+	var randomStart int
+
+	if uniqueATD == 0 {
+		randomParty = getRandom(maxHouseholdsNumber)
+		randomStart = getRandomStart(randomParty)
+	} else {
+		for !valid {
+			randomParty = getRandom(maxHouseholdsNumber)
+			randomStart = getRandomStart(randomParty)
+			var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+			if uniqueDataBlock(P, attacker_data_block, randomParty, randomStart, "rawInput") {
+				valid = true
+			}
+		}
+	}
+
+	var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+
+	var matched_households = identifyParty(P, attacker_data_block, randomParty, randomStart)
+	if len(matched_households) == 1 && matched_households[0] == randomParty {
+		attackSuccessNum++
+	}
 	return
 }
 
-func filterParties(P []*party, arr []float64) (resultParties []*party) {
-	resultParties = make([]*party, 0)
+func getRandomStart(party int) int {
+	// Return a unused random start for the party
+	var valid bool = false
 
-	for _, po := range P {
-		matched := false
-		for i := 0; i < len(po.plainInput)-len(arr); i++ {
-			for k := 0; k < len(arr); k++ {
-				if po.plainInput[i+k] != arr[k] {
-					break
-				} else if k == len(arr) {
-					matched = true
-				}
+	var randomStart int
+
+	for !valid {
+		randomStart = getRandom(MAX_PARTY_ROWS - atdSize)
+		if !contains(party, randomStart) {
+			usedRandomStartPartyPairs[party] = append(usedRandomStartPartyPairs[party], randomStart)
+			valid = true
+		}
+	}
+	return randomStart
+}
+
+func contains(party int, randomStart int) bool {
+	// Check if the party has used the random start before
+	var contains bool = false
+
+	val, exists := usedRandomStartPartyPairs[party]
+
+	if exists {
+		for _, v := range val {
+			if v == randomStart {
+				contains = true
 			}
-			if matched {
+		}
+	}
+
+	return contains
+}
+
+func uniqueDataBlock(P []*party, arr []float64, party int, index int, input_type string) bool {
+	// Check if the data block is unique in the dataset
+	var unique bool = true
+
+	for pn, po := range P {
+		if pn == party {
+			continue
+		}
+		var household_data []float64
+		if input_type == "rawInput" {
+			household_data = po.rawInput
+		} else {
+			household_data = po.encryptedInput
+		}
+		for i := 0; i < len(household_data)-atdSize+1; i++ {
+			var target = household_data[i : i+atdSize]
+			if reflect.DeepEqual(target, arr) {
+				unique = false
+				usedRandomStartPartyPairs[pn] = append(usedRandomStartPartyPairs[pn], i)
 				break
 			}
 		}
-		if matched {
-			resultParties = append(resultParties, po)
+		if !unique {
+			break
 		}
-	} // each party
-	return
+	}
+	return unique
+}
+
+func identifyParty(P []*party, arr []float64, party int, index int) []int {
+	// Identify the party based on the arr data block
+	var matched_households = []int{}
+
+	var dataset = P[party].encryptedInput[index : index+atdSize]
+
+	// Minimum length of the array to be considered a match.
+	var min_length int = int(math.Ceil(float64(len(arr)) * float64(min_percent_matched) / 100))
+
+	if min_length == len(arr) {
+		// When percent matched required is 100%, we can compare the arrays straight away.
+		if uniqueATD == 0 {
+			// If we are not using unique data blocks, need to check if it's an unique match
+			if reflect.DeepEqual(dataset, arr) && uniqueDataBlock(P, dataset, party, index, "encryptedInput") {
+				matched_households = append(matched_households, party)
+			}
+		} else {
+			if reflect.DeepEqual(dataset, arr) {
+				matched_households = append(matched_households, party)
+			}
+		}
+	} else {
+		// Otherwise, we need to compare each element of the arrays to see if matching percent meets the threshold.
+		var match int = 0
+		var mismatch int = 0
+		// For each element in the dataset, we compare it to the elements in the attack array.
+		for i := 0; i < len(arr); i++ {
+			// If the elements match, we increment the match counter.
+			if reflect.DeepEqual(arr[i], dataset[i]) {
+				match += 1
+
+			} else {
+				// Otherwise, we increment the mismatch counter.
+				mismatch += 1
+			}
+			// If the number of mismatches exceeds the allowable amount, we can stop checking.
+			if mismatch > (len(arr) - min_length) {
+				break
+			}
+		}
+
+		if float64(match)/float64(len(arr)) >= float64(min_percent_matched)/100.0 {
+			var pos_matches = [][]float64{}
+			// If the matched portion meets the percent matched, we check if the data block is unique in the encrypted dataset.
+			if atdSize <= sectionSize {
+				// if the atd is <= to section, the possible encrypted portion can only be at the start or end of the section.
+				var pos_match1 = P[party].encryptedInput[index : index+min_length]
+				var post_match2 = P[party].encryptedInput[index+atdSize-min_length : index+atdSize]
+				pos_matches = append(pos_matches, pos_match1, post_match2)
+			} else {
+				// Otherwise, possible positions of encrypted portion could be anywhere in the section.
+				for i := 0; i <= len(arr)-min_length; i++ {
+					var pos_match = P[party].encryptedInput[index+i : index+min_length+i]
+					pos_matches = append(pos_matches, pos_match)
+				}
+			}
+			if uniqueDataBlocks(P, pos_matches, party, index, min_length) {
+				// If it is unique (only one match), we add the party to the list of matched households.
+				matched_households = append(matched_households, party)
+			}
+		}
+	}
+
+	return matched_households
+}
+
+func uniqueDataBlocks(P []*party, pos_matches [][]float64, party int, index int, min_length int) bool {
+	// Check if the data blocks is unique in the dataset
+	var unique bool = true
+
+	for pn, po := range P {
+		if pn == party {
+			continue
+		}
+		var household_data []float64 = po.encryptedInput
+		for i := 0; i < len(household_data)-min_length+1; i++ {
+			var target = household_data[i : i+min_length]
+			for _, pos_match := range pos_matches {
+				if reflect.DeepEqual(target, pos_match) {
+					unique = false
+					break
+				}
+			}
+		}
+		if !unique {
+			break
+		}
+	}
+	return unique
 }
 
 func markEncryptedSectionsByRandom(en int, P []*party, entropySum, transitionSum float64) (plainSum []float64, entropyReduction float64, transitionReduction float64) {
@@ -547,10 +732,11 @@ func markEncryptedSectionsByGlobal(en int, P []*party, entropySum, transitionSum
 	// fmt.Println("----------------------------------------------->")
 	fmt.Printf("encryptionRatio/threshold = %.1f, entropy/transition remain = %.3f,%.3f\n", float64(encryptedSectionNum-en)/float64(encryptedSectionNum), entropySum-entropyReduction, (transitionSum-transitionReduction)/1000.0)
 
-	//for each threshold, prepare plainInput&input
+	//for each threshold, prepare plainInput&input, and encryptedInput
 	for pi, po := range P {
 		po.input = make([][]float64, 0)
 		po.plainInput = make([]float64, 0)
+		po.encryptedInput = make([]float64, 0)
 		k := 0
 		for j := 0; j < globalPartyRows; j++ {
 			if j%sectionSize == 0 && po.flag[j/sectionSize] == 1 {
@@ -560,9 +746,12 @@ func markEncryptedSectionsByGlobal(en int, P []*party, entropySum, transitionSum
 
 			if po.flag[j/sectionSize] == 1 {
 				po.input[k-1][j%sectionSize] = po.rawInput[j]
+				po.encryptedInput = append(po.encryptedInput, -0.1)
 			} else {
 				plainSum[pi] += po.rawInput[j]
 				po.plainInput = append(po.plainInput, po.rawInput[j])
+				po.encryptedInput = append(po.encryptedInput, -0.1)
+
 			}
 		}
 	}
@@ -1027,7 +1216,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 			lenPartyRows = MAX_PARTY_ROWS
 		}
 
-		if globalPartyRows == -1 {
+		if pi == 0 {
 			sectionNum = lenPartyRows / sectionSize
 			if lenPartyRows%sectionSize != 0 {
 				sectionNum++
@@ -1063,7 +1252,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 			frequencyMap[po.rawInput[i]] = val
 
 			expSummation[pi] += po.rawInput[i]
-		} //each line of one person
+		} //each meter reading entry of one household
 
 		expAverage[pi] = expSummation[pi] / float64(globalPartyRows)
 		for i := range po.rawInput {
@@ -1071,7 +1260,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 			expDeviation[pi] += temp * temp
 		}
 		expDeviation[pi] /= float64(globalPartyRows)
-	} // each person
+	} // each household
 
 	totalRecords := maxHouseholdsNumber * MAX_PARTY_ROWS
 	for k, _ := range frequencyMap {
@@ -1115,7 +1304,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 }
 
 // outputs the current, total and OS memory being used. As well as the number
-// of garage collection cycles completed.
+// of garbage collection cycles completed.
 func PrintMemUsage() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -1154,6 +1343,26 @@ func calculateStandardDeviation(numbers []float64) float64 {
 	standardDeviation := math.Sqrt(variance)
 
 	return standardDeviation
+}
+
+func calculateStandardDeviationandMean(numbers []float64) (float64, float64) {
+	var sum float64
+	for _, num := range numbers {
+		sum += num
+	}
+	mean := sum / float64(len(numbers))
+
+	var squaredDifferences float64
+	for _, num := range numbers {
+		difference := num - mean
+		squaredDifferences += difference * difference
+	}
+
+	variance := squaredDifferences / (float64(len(numbers)) - 1)
+
+	standardDeviation := math.Sqrt(variance)
+
+	return standardDeviation, mean
 }
 
 func writeSectionsToCSV(strategy, dataset string, sections []Section) error {
