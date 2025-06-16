@@ -1,6 +1,6 @@
 /*
-running command: // dataset, strategy
-go run .\experiment\experiment.go 1
+running command: // dataset
+go run .\ML_database_generation\generate_metrics.go 1
 */
 
 package main
@@ -96,7 +96,7 @@ func main() {
 		currentDataset = args[0]
 	}
 
-	csvFile, err := os.Create("./experiment/metrics_new.csv")
+	csvFile, err := os.Create("./ML_database_generation/metrics_new.csv")
 	check(err)
 	defer csvFile.Close()
 	writer := csv.NewWriter(csvFile)
