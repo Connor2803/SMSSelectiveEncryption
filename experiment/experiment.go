@@ -40,6 +40,7 @@ type party struct {
 	pcksShare   *drlwe.PCKSShare
 
 	rawInput   []float64   // All data
+	rawDates   []string    // Meter reading dates
 	input      [][]float64 // Encryption data
 	plainInput []float64   // Plaintext data
 	flag       []int       // Slice to track which sections have been encrypted
@@ -47,17 +48,16 @@ type party struct {
 	entropy    []float64 // Entropy for block
 } // Struct to represent an individual household
 
-type RecordMetrics struct {
-	HouseholdCSVFileName              string
-	MeterReadingDate                  string
-	MeterReadingTime                  string
-	MeterReadingValue                 float64
-	IndividualReadingEntropy          float64 // Per-reading, pre-encryption entropy value
-	Strategy                          string  // Global, Household, Random
-	EncryptionRatio                   float64
-	IndividualReadingRemainingEntropy float64 // Per-reading, post-encryption entropy value
-	Round                             int
-} // Struct to represent a meter reading in an individual household
+type SectionsMetrics struct {
+	HouseholdCSVFileName string
+	SectionNumber        int
+	DateRange            string
+	SectionSumUsage      float64
+	EncryptionRatio      float64
+	RawEntropy           float64 // Per-section, pre-encryption entropy value
+	RemainingEntropy     float64 // Per-section, post-encryption entropy value
+	Round                int
+} // Struct to represent a section/block in an individual household
 
 const STRATEGY_GLOBAL = 1
 const STRATEGY_HOUSEHOLD = 2
@@ -73,7 +73,7 @@ var currentStrategy = 2 // Global(1), Household(2), Random(3)
 var currentTarget = 1   // Entropy-based (1), Transition-based (2)
 
 var currentDataset int // Water(1), Electricity(2)
-var maxHouseholdsNumber = 1
+var maxHouseholdsNumber = 80
 
 var sectionNum int
 var globalPartyRows = -1
@@ -96,7 +96,7 @@ func main() {
 		currentDataset = args[0]
 	}
 
-	csvFile, err := os.Create("./experiment/metrics.csv")
+	csvFile, err := os.Create("./experiment/metrics_new.csv")
 	check(err)
 	defer csvFile.Close()
 	writer := csv.NewWriter(csvFile)
@@ -148,152 +148,160 @@ func main() {
 	process(fileList[:maxHouseholdsNumber], params, writer)
 }
 
-// main start
+// process reads the input files, calculates the entropy for different
+// encryption ratios, and writes the results to a CSV file.
+// process reads the input files, calculates entropy, and writes the results.
 func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 
-	allMetrics := []RecordMetrics{} // Holds all metrics from all parties
-
-	// Write header
+	// --- 1. Setup Phase ---
 	err := writer.Write([]string{
-		"filename", "date", "time", "utility_used",
-		"individual_reading_entropy", "strategy", "encryption_ratio", "individual_reading_remaining_entropy",
+		"filename",
+		"section",
+		"date_range",
+		"section_sum_usage",
+		"encryption_ratio",
+		"section_raw_entropy",
+		"section_remaining_entropy",
 	})
 	check(err)
 
-	encryptedSectionNum = MAX_PARTY_ROWS / sectionSize // MAX_PARTY_ROWS = 10240, sectionSize = 1024
-	if MAX_PARTY_ROWS%sectionSize != 0 {
-		encryptedSectionNum++
-	}
+	P := genParties(params, fileList)
+	// This call now only populates party.rawInput and sets the global sectionNum.
+	genInputs(P, &[]SectionsMetrics{})
 
-	// Encrypt sections and update entropy
-	//var entropyReduction float64
-	//var prevEntropy float64
+	allResults := []SectionsMetrics{}
 
-	var prevEntropy float64
-	for en := 0; en < encryptedSectionNum; en++ {
-		// Holds metrics from single party
-		metrics := []RecordMetrics{}
-		// Create each party, and allocate the memory for all the shares that the protocols will need
-		P := genParties(params, fileList)
-		// Get inputs and fill metrics
-		genInputs(P, &metrics)
+	// --- 2. Processing Phase ---
+	numRatioSteps := 10
 
-		encRatio := float64(en+1) / float64(encryptedSectionNum)
-		_, entropyReduction := markEncryptedSectionsByHousehold(en, encRatio, prevEntropy, P, &metrics)
-		prevEntropy = entropyReduction
+	for i := 1; i <= numRatioSteps; i++ {
+		encRatio := float64(i) / float64(numRatioSteps)
 
-		// Append a snapshot of this marking round's metrics to allMetrics
-		for _, m := range metrics {
-			snapshot := m // Create a copy so the results don't get mutated in the next round.
-			snapshot.EncryptionRatio = encRatio
-			snapshot.Round = en + 1
-			allMetrics = append(allMetrics, snapshot)
+		for _, party := range P {
+			for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+
+				// Get the original raw data for the current section.
+				start := sectionIdx * sectionSize
+				end := (sectionIdx + 1) * sectionSize
+				if end > len(party.rawInput) {
+					end = len(party.rawInput)
+				}
+				rawSectionData := party.rawInput[start:end]
+				rawSectionDates := party.rawDates[start:end]
+
+				// Calculate raw entropy directly from the raw data.
+				rawEntropy := calculateEntropy(rawSectionData)
+
+				// Calculate Section Sum Utility Usage
+				sectionSumUsage := 0.0
+				for _, val := range rawSectionData {
+					sectionSumUsage += val
+				}
+
+				// Determine Date Range for section
+				var dateRange string
+				if len(rawSectionDates) > 0 {
+					firstDate := rawSectionDates[0]
+					lastDate := rawSectionDates[len(rawSectionDates)-1]
+					dateRange = fmt.Sprintf("%s to %s", firstDate, lastDate)
+				} else {
+					dateRange = "N/A"
+				}
+
+				// Create a temporary copy to apply the encryption ratio to.
+				tempSectionInput := make([]float64, len(rawSectionData))
+				copy(tempSectionInput, rawSectionData)
+
+				for j := range tempSectionInput {
+					tempSectionInput[j] *= (1.0 - encRatio)
+
+					// Apply quantization (coarser rounding) based on the encryption ratio.
+					var precision float64
+					if encRatio <= 0.3 {
+						precision = 100 // Keep 2 decimal places for low ratios
+					} else if encRatio <= 0.7 {
+						precision = 10 // Round to 1 decimal places for medium ratios
+					} else {
+						precision = 1 // Round to 0 decimal place for high ratios
+					}
+					tempSectionInput[j] = float64(math.Round(tempSectionInput[j]*float64(precision)) / float64(precision))
+				}
+
+				// Calculate remaining entropy from the modified data.
+				remainingEntropy := calculateEntropy(tempSectionInput)
+
+				// Append the complete result for this data point.
+				allResults = append(allResults, SectionsMetrics{
+					HouseholdCSVFileName: party.filename,
+					SectionNumber:        sectionIdx,
+					DateRange:            dateRange,
+					SectionSumUsage:      sectionSumUsage,
+					EncryptionRatio:      encRatio,
+					RawEntropy:           rawEntropy,
+					RemainingEntropy:     remainingEntropy,
+				})
+			}
 		}
 	}
 
-	//Write metrics to file
-	//for _, rec := range allMetrics {
-	//	err := writer.Write([]string{
-	//		rec.HouseholdCSVFileName,
-	//		rec.MeterReadingDate,
-	//		rec.MeterReadingTime,
-	//		fmt.Sprintf("%.4f", rec.MeterReadingValue),
-	//		fmt.Sprintf("%.6f", rec.IndividualReadingEntropy),
-	//		rec.Strategy,
-	//		fmt.Sprintf("%.4f", rec.EncryptionRatio),
-	//		fmt.Sprintf("%.6f", rec.IndividualReadingRemainingEntropy),
-	//	})
-	//	check(err)
-	//}
-
+	// --- 3. Writing Phase ---
+	for _, result := range allResults {
+		err := writer.Write([]string{
+			filepath.Base(result.HouseholdCSVFileName),
+			strconv.Itoa(result.SectionNumber),
+			result.DateRange, // New column
+			fmt.Sprintf("%.2f", result.SectionSumUsage),
+			fmt.Sprintf("%.2f", result.EncryptionRatio),
+			fmt.Sprintf("%.6f", result.RawEntropy),
+			fmt.Sprintf("%.6f", result.RemainingEntropy),
+		})
+		check(err)
+	}
 	writer.Flush()
 }
 
 /*
-This function selects one section within each household for encryption based on which section has the most amount of entropy.
-This function additionally computes for single records/meter readings within a party/household.
+This function encrypts each section individually across all parties at a given encryption ratio.
+It applies the ratio to a single section per party, then computes and stores the remaining entropy
+for that section, leaving all other sections untouched. This enables ML training on section × ratio combinations.
 */
-func markEncryptedSectionsByHousehold(en int, encRatio float64, prevEntropyReduction float64, P []*party, metrics *[]RecordMetrics) (plainSum []float64, entropyReduction float64) {
-	currentEntropyReduction := 0.0
-	plainSum = make([]float64, len(P))
-	var targetArr []float64
-
-	// Encrypt one section per household
-	for _, po := range P {
-		index := 0
-		max := -1.0
-		targetArr = po.entropy
-
-		for j := 0; j < sectionNum; j++ {
-			if po.flag[j] != 1 && targetArr[j] > max {
-				max = targetArr[j]
-				index = j
-			}
-		}
-		po.flag[index] = 1 // po.flag has sectionNumber elements
-		currentEntropyReduction += po.entropy[index]
-	}
-
-	// Compute the difference (entropy reduction for this round of marking)
-	roundEntropyReduction := currentEntropyReduction - prevEntropyReduction
-
-	// Prepare encrypted and plaintext inputs and process records
+func markEncryptedSectionsByHousehold(encRatio float64, P []*party, metrics *[]SectionsMetrics) {
 	for pi, po := range P {
-		po.input = make([][]float64, 0)
-		po.plainInput = make([]float64, 0)
-		k := 0
+		// Loop through each section to apply the encryption ratio and calculate entropy
+		for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+			// Create a temporary copy of the raw input for this section
+			tempSectionInput := make([]float64, sectionSize)
+			copy(tempSectionInput, po.rawInput[sectionIdx*sectionSize:(sectionIdx+1)*sectionSize])
 
-		for j := 0; j < globalPartyRows; j++ {
-			sectionIndex := j / sectionSize
-			recordIndex := pi*globalPartyRows + j
+			// Apply the encryption ratio to the temporary section data
+			for i := range tempSectionInput {
+				tempSectionInput[i] *= (1.0 - encRatio)
+			}
 
-			// Calculate section entropy sum once for encrypted sections
-			var sectionEntropySum float64 // Local per-section total entropy
-			if po.flag[sectionIndex] == 1 {
-				start := sectionIndex * sectionSize // Index (relative to that household) of the first record in the section.
-				end := start + sectionSize          // Index of the last record (non-inclusive) in the section
-				globalStart := pi*globalPartyRows + start
-				globalEnd := pi*globalPartyRows + end
-				for s := globalStart; s < globalEnd && s < len(*metrics); s++ {
-					sectionEntropySum += (*metrics)[s].IndividualReadingEntropy
+			// Calculate the remaining entropy for this modified section
+			sectionEntropy := 0.0
+			frequency := make(map[float64]int)
+			for _, val := range tempSectionInput {
+				roundedVal := math.Round(val*1000) / 1000
+				frequency[roundedVal]++
+			}
+
+			total := float64(len(tempSectionInput))
+			for _, count := range frequency {
+				if count > 0 {
+					p := float64(count) / total
+					sectionEntropy -= p * math.Log2(p)
 				}
 			}
 
-			// Update per-record encryption metrics
-			if recordIndex < len(*metrics) {
-				if po.flag[sectionIndex] == 1 {
-					// This record is in an encrypted section
-					if currentEntropyReduction <= 0 {
-						continue
-					} else {
-						ratio := (*metrics)[recordIndex].IndividualReadingEntropy / sectionEntropySum                                                                  // How much of the entropy reduction does each record own
-						(*metrics)[recordIndex].IndividualReadingRemainingEntropy = (*metrics)[recordIndex].IndividualReadingEntropy - (roundEntropyReduction * ratio) // Reduce by only that amount
-						fmt.Printf("round=%d, currententropyreduction=%.4f, record=%d, original=%.6f, encryptionratio=%.4f, entropyreductionratio=%.4f, reduced=%.6f\n", en, currentEntropyReduction, recordIndex, (*metrics)[recordIndex].IndividualReadingEntropy, encRatio, ratio, (*metrics)[recordIndex].IndividualReadingRemainingEntropy)
-					}
-				} else {
-					// Not encrypted yet
-					(*metrics)[recordIndex].IndividualReadingRemainingEntropy = (*metrics)[recordIndex].IndividualReadingEntropy
-				}
-				(*metrics)[recordIndex].Strategy = "Household"
-			}
-
-			// Setup encrypted vs plain input
-			if j%sectionSize == 0 && po.flag[sectionIndex] == 1 {
-				po.input = append(po.input, make([]float64, sectionSize))
-				k++
-			}
-			if po.flag[sectionIndex] == 1 {
-				if k > 0 {
-					po.input[k-1][j%sectionSize] = po.rawInput[j]
-				}
-			} else {
-				plainSum[pi] += po.rawInput[j]
-				po.plainInput = append(po.plainInput, po.rawInput[j])
+			// Update the metrics for the current section
+			metricIndex := pi*sectionNum + sectionIdx
+			if metricIndex < len(*metrics) {
+				(*metrics)[metricIndex].RemainingEntropy = sectionEntropy
+				(*metrics)[metricIndex].EncryptionRatio = encRatio
 			}
 		}
 	}
-
-	return plainSum, currentEntropyReduction
 }
 
 // File Reading
@@ -305,34 +313,28 @@ func readCSV(path string) []string {
 }
 
 // Trim CSV
-func resizeCSV(filename string, metrics *[]RecordMetrics) []RecordMetrics {
+func resizeCSV(filename string) ([]float64, []string) {
 	csvLines := readCSV(filename)
+	var readings []float64
+	var dates []string
 
-	for lineIndex, line := range csvLines {
+	for _, line := range csvLines {
 		slices := strings.Split(line, ",")
 		if len(slices) < 2 {
 			continue
 		}
-		householdFilename := filepath.Base(strings.TrimSuffix(filename, filepath.Ext(filename)))
 		utilityDate := strings.TrimSpace(slices[0])
-		utilityTime := strings.TrimSpace(slices[1])
 		usageStr := strings.TrimSpace(slices[len(slices)-1])
 
 		usage, err := strconv.ParseFloat(usageStr, 64)
 		check(err)
-
-		if lineIndex < MAX_PARTY_ROWS {
-			entry := RecordMetrics{
-				HouseholdCSVFileName: householdFilename,
-				MeterReadingDate:     utilityDate,
-				MeterReadingTime:     utilityTime,
-				MeterReadingValue:    usage,
-			}
-			*metrics = append(*metrics, entry)
+		if err == nil {
+			readings = append(readings, usage)
+			dates = append(dates, utilityDate)
 		}
 	}
 
-	return *metrics
+	return readings, dates
 }
 
 func getRandom(numberRange int) (randNumber int) {
@@ -340,7 +342,7 @@ func getRandom(numberRange int) (randNumber int) {
 	return
 }
 
-// generate parties
+// Generate parties/households
 func genParties(params ckks.Parameters, fileList []string) []*party {
 
 	// Create each party, and allocate the memory for all the shares that the protocols will need
@@ -356,8 +358,8 @@ func genParties(params ckks.Parameters, fileList []string) []*party {
 	return P
 }
 
-// generate inputs of parties
-func genInputs(P []*party, metrics *[]RecordMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
+// Generate inputs of parties/households
+func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
 	globalPartyRows = -1
 	sectionNum = 0
 	min = math.MaxFloat64
@@ -369,7 +371,7 @@ func genInputs(P []*party, metrics *[]RecordMetrics) (expSummation, expAverage, 
 
 	for pi, po := range P {
 		// Setup (rawInput, flags etc.)
-		partyRows := resizeCSV(po.filename, metrics)
+		partyRows, partyDates := resizeCSV(po.filename)
 		if currentDataset == DATASET_WATER { // Reverse chronological order
 			for i, j := 0, len(partyRows)-1; i < j; i, j = i+1, j-1 {
 				partyRows[i], partyRows[j] = partyRows[j], partyRows[i]
@@ -380,7 +382,7 @@ func genInputs(P []*party, metrics *[]RecordMetrics) (expSummation, expAverage, 
 			lenPartyRows = MAX_PARTY_ROWS
 		}
 		if globalPartyRows == -1 {
-			sectionNum = lenPartyRows / sectionSize // sectionNum = 10, lenPartyRows = 10240, sectionSize = 1024
+			sectionNum = lenPartyRows / sectionSize // sectionNum = 10, since lenPartyRows = 10240, sectionSize = 1024
 			if lenPartyRows%sectionSize != 0 {
 				sectionNum++
 			}
@@ -396,14 +398,16 @@ func genInputs(P []*party, metrics *[]RecordMetrics) (expSummation, expAverage, 
 
 		// Set up party structure
 		po.rawInput = make([]float64, globalPartyRows)
+		po.rawDates = make([]string, globalPartyRows)
 		po.flag = make([]int, sectionNum)        // Marked sections for encryption
 		po.entropy = make([]float64, sectionNum) // Entropy values for each section of that household
 		po.group = make([]int, sectionSize)
 
 		// Fill in rawInput & frequencyMap
 		for i := 0; i < globalPartyRows; i++ {
-			usage := math.Round(partyRows[i].MeterReadingValue*1000) / 1000
+			usage := math.Round(partyRows[i]*1000) / 1000
 			po.rawInput[i] = usage
+			po.rawDates[i] = partyDates[i]
 			frequencyMap[usage]++
 			expSummation[pi] += po.rawInput[i]
 		}
@@ -426,26 +430,51 @@ func genInputs(P []*party, metrics *[]RecordMetrics) (expSummation, expAverage, 
 			singleRecordEntropy := entropyMap[usage] / float64(frequencyMap[usage])
 			po.entropy[i/sectionSize] += singleRecordEntropy
 			entropySum += singleRecordEntropy // Global all data total entropy
-			if i < len(*metrics) {
-				(*metrics)[i].IndividualReadingEntropy = singleRecordEntropy
-			}
 		}
 		po.flag = make([]int, sectionNum) // Reset flag for every party
+
+		// Min, Max based on currentTarget which is always (1) Entropy-based.
+		for _, po := range P {
+			var targetArr []float64
+			targetArr = po.entropy // Holds reference to entropy values for each section of that household.
+
+			for sIndex := range targetArr {
+				if targetArr[sIndex] > max {
+					max = targetArr[sIndex] // Max entropy seen so far across all parties.
+				}
+				if targetArr[sIndex] < min {
+					min = targetArr[sIndex] // Min entropy seen so far across all parties.
+				}
+			}
+		}
+
+	}
+	return
+}
+
+/*
+calculateEntropy computes the Shannon entropy for a slice of float64 data and returns this entropy as a float.
+Shannon Entropy quantifies the average amount of "information" or "uncertainty" contained in a set of data, this means
+A higher entropy value indicates that the data contains more distinct information.
+*/
+func calculateEntropy(data []float64) float64 {
+	var entropy float64
+	frequency := make(map[float64]int)
+	for _, val := range data {
+		// Rounding here treats inputs that are very close to each other as identical for the purpose of entropy calculations
+		// By converting continious-like data into discrete "bins" before calculating probabilities.
+		roundedVal := math.Round(val*1000) / 1000
+		frequency[roundedVal]++
 	}
 
-	// Min, Max based on currentTarget which is always (1) Entropy-based
-	for _, po := range P {
-		var targetArr []float64
-		targetArr = po.entropy // Holds reference to entropy values for each section of that household
-
-		for sIndex := range targetArr {
-			if targetArr[sIndex] > max {
-				max = targetArr[sIndex] // Max entropy seen so far across all parties
-			}
-			if targetArr[sIndex] < min {
-				min = targetArr[sIndex] // Min entropy seen so far across all parties
+	total := float64(len(data))
+	if total > 0 {
+		for _, count := range frequency {
+			if count > 0 {
+				p := float64(count) / total
+				entropy -= p * math.Log2(p)
 			}
 		}
 	}
-	return
+	return entropy
 }
