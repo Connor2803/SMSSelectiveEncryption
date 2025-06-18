@@ -1,6 +1,7 @@
 /*
 running command: // dataset
 go run .\ML_database_generation\generate_metrics.go 1
+> Run this code for the Water dataset.
 */
 
 package main
@@ -9,18 +10,18 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/drlwe"
+	"github.com/tuneinsight/lattigo/v4/rlwe"
 	utils "lattigo"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/tuneinsight/lattigo/v4/ckks"
-	"github.com/tuneinsight/lattigo/v4/drlwe"
-	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
 func check(err error) {
@@ -29,7 +30,7 @@ func check(err error) {
 	}
 }
 
-type party struct {
+type Party struct {
 	filename    string
 	sk          *rlwe.SecretKey
 	rlkEphemSk  *rlwe.SecretKey
@@ -39,38 +40,41 @@ type party struct {
 	rtgShare    *drlwe.RTGShare
 	pcksShare   *drlwe.PCKSShare
 
-	rawInput   []float64   // All data
-	rawDates   []string    // Meter reading dates
-	input      [][]float64 // Encryption data
-	plainInput []float64   // Plaintext data
-	flag       []int       // Slice to track which sections have been encrypted
-	group      []int
-	entropy    []float64 // Entropy for block
+	rawInput       []float64   // All data
+	rawDates       []string    // All dates corresponding to rawInput
+	input          [][]float64 // Encryption data
+	plainInput     []float64   // Plaintext data
+	flag           []int       // Slice to track which sections have been encrypted
+	group          []int
+	entropy        []float64   // Entropy for block
+	encryptedInput [][]float64 // Transformed data for each block/section after encryption
 } // Struct to represent an individual household
 
 type SectionsMetrics struct {
-	HouseholdCSVFileName string
-	SectionNumber        int
-	DateRange            string
-	SectionSumUsage      float64
-	EncryptionRatio      float64
-	RawEntropy           float64 // Per-section, pre-encryption entropy value
-	RemainingEntropy     float64 // Per-section, post-encryption entropy value
-	Round                int
+	HouseholdCSVFileName    string
+	SectionNumber           int
+	DateRange               string // DD-MM-YYYY to DD-MM-YYYY
+	SectionSumUsage         float64
+	EncryptionRatio         float64
+	RawEntropy              float64 // Per-section, pre-encryption entropy value
+	RemainingEntropy        float64 // Per-section, post-encryption entropy value
+	ASRMean                 float64
+	ASRStandardError        float64
+	ASRDuration             time.Duration // Total time for the entire attack to run.
+	AvgPerAttackRunDuration float64       // Average time for a single attack to run.
 } // Struct to represent a section/block in an individual household
 
-const STRATEGY_GLOBAL = 1
-const STRATEGY_HOUSEHOLD = 2
-const STRATEGY_RANDOM = 3
+type ResultKey struct {
+	HouseholdCSVFileName string
+	SectionNumber        int
+	EncryptionRatio      float64
+} // Struct to represent the unique identifier for a section/block.
 
 const DATASET_WATER = 1
 const DATASET_ELECTRICITY = 2
 
 const MAX_PARTY_ROWS = 10240 // Total records/meter readings per household
 const sectionSize = 1024     // Block Size: 2048 for summation correctness, 8192 for variance correctness
-
-var currentStrategy = 2 // Global(1), Household(2), Random(3)
-var currentTarget = 1   // Entropy-based (1), Transition-based (2)
 
 var currentDataset int // Water(1), Electricity(2)
 var maxHouseholdsNumber = 80
@@ -79,7 +83,15 @@ var sectionNum int
 var globalPartyRows = -1
 var encryptedSectionNum int
 
+var max_attackLoop = 1000 // Default value for number of loops for membershipIdentificationAttack.
+var atdSize = 24          // Element number of unique attacker data
+var uniqueATD int = 0     // Unique attacker data, 1 for true, 0 for false
+var usedRandomStartPartyPairs = map[int][]int{}
+var min_percent_matched = 90 // Default value for minimum percentage match for identification.
+
 func main() {
+
+	rand.Seed(time.Now().UnixNano())
 
 	var args []int
 
@@ -95,20 +107,19 @@ func main() {
 	if len(args) > 0 {
 		currentDataset = args[0]
 	}
+	var outputFileName string
 
-	csvFile, err := os.Create("./ML_database_generation/metrics_new.csv")
+	if currentDataset == DATASET_WATER {
+		outputFileName = "./ML_database_generation/ML_metrics_WATER.csv"
+	} else {
+		outputFileName = "./ML_database_generation/ML_metrics_ELECTRICITY.csv"
+	}
+	outputFile, err := os.Create(outputFileName)
 	check(err)
-	defer csvFile.Close()
-	writer := csv.NewWriter(csvFile)
+	defer outputFile.Close()
+
+	writer := csv.NewWriter(outputFile)
 	defer writer.Flush()
-
-	originalOutput := os.Stdout
-	defer func() { os.Stdout = originalOutput }()
-	os.Stdout = csvFile
-
-	rand.Seed(time.Now().UnixNano())
-
-	//start := time.Now()
 
 	fileList := []string{}
 	paramsDef := utils.PN10QP27CI
@@ -128,7 +139,7 @@ func main() {
 	}
 	if currentDataset == DATASET_WATER {
 		path = fmt.Sprintf(pathFormat, "water", MAX_PARTY_ROWS)
-	} else { //electricity
+	} else {
 		path = fmt.Sprintf(pathFormat, "electricity", MAX_PARTY_ROWS)
 	}
 
@@ -162,21 +173,24 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 		"encryption_ratio",
 		"section_raw_entropy",
 		"section_remaining_entropy",
+		"asr_mean",
+		"asr_standard_error",
+		"asr_attack_duration",
+		"avg_time_per_attack_run",
 	})
 	check(err)
 
 	P := genParties(params, fileList)
-	// This call now only populates party.rawInput and sets the global sectionNum.
+
+	// Populate Party.rawInput and sets the global sectionNum.
 	genInputs(P, &[]SectionsMetrics{})
 
-	allResults := []SectionsMetrics{}
+	allResults := make(map[ResultKey]SectionsMetrics)
 
 	// --- 2. Processing Phase ---
-	numRatioSteps := 10
+	encryptionRatios := []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}
 
-	for i := 1; i <= numRatioSteps; i++ {
-		encRatio := float64(i) / float64(numRatioSteps)
-
+	for _, encRatio := range encryptionRatios {
 		for _, party := range P {
 			for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
 
@@ -192,7 +206,7 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 				// Calculate raw entropy directly from the raw data.
 				rawEntropy := calculateEntropy(rawSectionData)
 
-				// Calculate Section Sum Utility Usage
+				// Calculate sum of all the utility meter readings from a section.
 				sectionSumUsage := 0.0
 				for _, val := range rawSectionData {
 					sectionSumUsage += val
@@ -215,7 +229,8 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 				for j := range tempSectionInput {
 					tempSectionInput[j] *= (1.0 - encRatio)
 
-					// Apply quantization (coarser rounding) based on the encryption ratio.
+					// Apply quantisation (coarser rounding) based on the encryption rati
+					// To simulate the information loss that occurs during a privacy-preserving.
 					var precision float64
 					if encRatio <= 0.3 {
 						precision = 100 // Keep 2 decimal places for low ratios
@@ -227,11 +242,21 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 					tempSectionInput[j] = float64(math.Round(tempSectionInput[j]*float64(precision)) / float64(precision))
 				}
 
+				// Store the transformed data in Party.encryptedInput for attack
+				party.encryptedInput[sectionIdx] = tempSectionInput
+
 				// Calculate remaining entropy from the modified data.
 				remainingEntropy := calculateEntropy(tempSectionInput)
 
+				// Create the key for the map
+				key := ResultKey{
+					HouseholdCSVFileName: filepath.Base(party.filename),
+					SectionNumber:        sectionIdx,
+					EncryptionRatio:      encRatio,
+				}
+
 				// Append the complete result for this data point.
-				allResults = append(allResults, SectionsMetrics{
+				allResults[key] = SectionsMetrics{
 					HouseholdCSVFileName: party.filename,
 					SectionNumber:        sectionIdx,
 					DateRange:            dateRange,
@@ -239,33 +264,88 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 					EncryptionRatio:      encRatio,
 					RawEntropy:           rawEntropy,
 					RemainingEntropy:     remainingEntropy,
-				})
+					// REMINDER: ASR metrics will be updated after the memberIdentificationAttack call for this ratio
+				}
+			}
+		}
+
+		// --- 3. Attack Phase --
+		// Reset house_sample for each encryption ratio iteration to collect new ASRs
+		currentRatioAttackResults := []float64{} // Contains the results of each attack loop for a given encryption ratio.
+
+		attackPhaseStartTime := time.Now()
+
+		// After all households/parties and sections have had the current encryption ratio applied,
+		// Run the member identification attack.
+		fmt.Printf("\n--- Starting Attack Phase for Encryption Ratio: %.2f ---\n", encRatio)
+		currentRatioAttackResults = memberIdentificationAttack(P, encRatio)
+
+		// Calculate ASR mean and standard error for the current encryption ratio
+		asrMean := 0.0
+		asrStdError := 0.0
+
+		if len(currentRatioAttackResults) > 0 {
+			// Convert success counts to ASRs (Attack Success Rates)
+			var asrRates []float64
+			totalAttackableInstancesPerRun := float64(len(P))
+			if totalAttackableInstancesPerRun == 0 {
+				fmt.Println("ERROR: totalAttackableInstancesPerRun is 0. Cannot calculate ASR.")
+			} else {
+				for _, successCount := range currentRatioAttackResults {
+					asrRates = append(asrRates, successCount/float64(totalAttackableInstancesPerRun))
+				}
+			}
+
+			stdDev, mean := calculateStandardDeviationAndMean(asrRates)
+			asrMean = mean
+			asrStdError = stdDev / math.Sqrt(float64(len(asrRates)))
+			fmt.Printf("Final ASR Mean: %.6f, ASR Standard Error: %.6f\n", asrMean, asrStdError)
+		} else {
+			fmt.Println("WARNING: currentRatioAttackResults is empty. ASR cannot be calculated.")
+		}
+
+		attackPhaseEndTime := time.Now()
+		asrAttackDuration := attackPhaseEndTime.Sub(attackPhaseStartTime)
+		avgTimePerAttackRun := asrAttackDuration.Seconds() / float64(max_attackLoop)
+
+		for key, result := range allResults {
+			if key.EncryptionRatio == encRatio {
+				// Note: Go maps store copies of values, so you must reassign the modified struct
+				tempResult := result
+				tempResult.ASRMean = asrMean
+				tempResult.ASRStandardError = asrStdError
+				tempResult.ASRDuration = asrAttackDuration
+				tempResult.AvgPerAttackRunDuration = avgTimePerAttackRun
+
+				allResults[key] = tempResult
 			}
 		}
 	}
 
-	// --- 3. Writing Phase ---
+	// --- 4. Writing Phase ---
 	for _, result := range allResults {
 		err := writer.Write([]string{
 			filepath.Base(result.HouseholdCSVFileName),
 			strconv.Itoa(result.SectionNumber),
-			result.DateRange, // New column
+			result.DateRange,
 			fmt.Sprintf("%.2f", result.SectionSumUsage),
 			fmt.Sprintf("%.2f", result.EncryptionRatio),
 			fmt.Sprintf("%.6f", result.RawEntropy),
 			fmt.Sprintf("%.6f", result.RemainingEntropy),
+			fmt.Sprintf("%.6f", result.ASRMean),
+			fmt.Sprintf("%.6f", result.ASRStandardError),
+			fmt.Sprintf("%.6f", result.ASRDuration.Seconds()),
+			fmt.Sprintf("%.6f", result.AvgPerAttackRunDuration),
 		})
 		check(err)
 	}
 	writer.Flush()
 }
 
-/*
-This function encrypts each section individually across all parties at a given encryption ratio.
-It applies the ratio to a single section per party, then computes and stores the remaining entropy
-for that section, leaving all other sections untouched. This enables ML training on section × ratio combinations.
-*/
-func markEncryptedSectionsByHousehold(encRatio float64, P []*party, metrics *[]SectionsMetrics) {
+// This function encrypts each section individually across all parties at a given encryption ratio.
+// It applies the ratio to a single section per Party, then computes and stores the remaining entropy
+// for that section, leaving all other sections untouched. This enables ML training on section × ratio combinations.
+func markEncryptedSectionsByHousehold(encRatio float64, P []*Party, metrics *[]SectionsMetrics) {
 	for pi, po := range P {
 		// Loop through each section to apply the encryption ratio and calculate entropy
 		for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
@@ -312,8 +392,8 @@ func readCSV(path string) []string {
 	return dArray[:len(dArray)-1]
 }
 
-// Trim CSV
-func resizeCSV(filename string) ([]float64, []string) {
+// Parse CSV
+func parseCSV(filename string) ([]float64, []string) {
 	csvLines := readCSV(filename)
 	var readings []float64
 	var dates []string
@@ -337,19 +417,14 @@ func resizeCSV(filename string) ([]float64, []string) {
 	return readings, dates
 }
 
-func getRandom(numberRange int) (randNumber int) {
-	randNumber = rand.Intn(numberRange) //[0, numberRange-1]
-	return
-}
-
 // Generate parties/households
-func genParties(params ckks.Parameters, fileList []string) []*party {
+func genParties(params ckks.Parameters, fileList []string) []*Party {
 
-	// Create each party, and allocate the memory for all the shares that the protocols will need
-	P := make([]*party, len(fileList))
+	// Create each Party, and allocate the memory for all the shares that the protocols will need
+	P := make([]*Party, len(fileList))
 
 	for i, _ := range P {
-		po := &party{}
+		po := &Party{}
 		po.sk = ckks.NewKeyGenerator(params).GenSecretKey()
 		po.filename = fileList[i]
 		P[i] = po
@@ -359,7 +434,7 @@ func genParties(params ckks.Parameters, fileList []string) []*party {
 }
 
 // Generate inputs of parties/households
-func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
+func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
 	globalPartyRows = -1
 	sectionNum = 0
 	min = math.MaxFloat64
@@ -371,10 +446,11 @@ func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage
 
 	for pi, po := range P {
 		// Setup (rawInput, flags etc.)
-		partyRows, partyDates := resizeCSV(po.filename)
+		partyRows, partyDates := parseCSV(po.filename)
 		if currentDataset == DATASET_WATER { // Reverse chronological order
 			for i, j := 0, len(partyRows)-1; i < j; i, j = i+1, j-1 {
 				partyRows[i], partyRows[j] = partyRows[j], partyRows[i]
+				partyDates[i], partyDates[j] = partyDates[j], partyDates[i]
 			}
 		}
 		lenPartyRows := len(partyRows)
@@ -396,11 +472,12 @@ func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage
 			check(err)
 		}
 
-		// Set up party structure
+		// Set up Party structure
 		po.rawInput = make([]float64, globalPartyRows)
 		po.rawDates = make([]string, globalPartyRows)
-		po.flag = make([]int, sectionNum)        // Marked sections for encryption
-		po.entropy = make([]float64, sectionNum) // Entropy values for each section of that household
+		po.flag = make([]int, sectionNum)        // Marked sections for encryption.
+		po.entropy = make([]float64, sectionNum) // Entropy values for each section of a particular party/household.
+		po.encryptedInput = make([][]float64, sectionNum)
 		po.group = make([]int, sectionSize)
 
 		// Fill in rawInput & frequencyMap
@@ -431,12 +508,12 @@ func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage
 			po.entropy[i/sectionSize] += singleRecordEntropy
 			entropySum += singleRecordEntropy // Global all data total entropy
 		}
-		po.flag = make([]int, sectionNum) // Reset flag for every party
+		po.flag = make([]int, sectionNum) // Reset flag for every Party
 
 		// Min, Max based on currentTarget which is always (1) Entropy-based.
 		for _, po := range P {
 			var targetArr []float64
-			targetArr = po.entropy // Holds reference to entropy values for each section of that household.
+			targetArr = po.entropy
 
 			for sIndex := range targetArr {
 				if targetArr[sIndex] > max {
@@ -452,17 +529,15 @@ func genInputs(P []*party, metrics *[]SectionsMetrics) (expSummation, expAverage
 	return
 }
 
-/*
-calculateEntropy computes the Shannon entropy for a slice of float64 data and returns this entropy as a float.
-Shannon Entropy quantifies the average amount of "information" or "uncertainty" contained in a set of data, this means
-A higher entropy value indicates that the data contains more distinct information.
-*/
+// calculateEntropy is a helper function that computes the Shannon entropy for a slice of float64 data and returns this entropy as a 64-bit float.
+// Shannon Entropy quantifies the average amount of "information" or "uncertainty" contained in a set of data, this means
+// A higher entropy value indicates that the data contains more distinct information.
 func calculateEntropy(data []float64) float64 {
 	var entropy float64
 	frequency := make(map[float64]int)
 	for _, val := range data {
 		// Rounding here treats inputs that are very close to each other as identical for the purpose of entropy calculations
-		// By converting continious-like data into discrete "bins" before calculating probabilities.
+		// By converting continuous-like data into discrete "bins" before calculating probabilities.
 		roundedVal := math.Round(val*1000) / 1000
 		frequency[roundedVal]++
 	}
@@ -477,4 +552,285 @@ func calculateEntropy(data []float64) float64 {
 		}
 	}
 	return entropy
+}
+
+func getRandom(numberRange int) (randNumber int) {
+	randNumber = rand.Intn(numberRange) //[0, numberRange-1]
+	return
+}
+
+func memberIdentificationAttack(P []*Party, currentEncRatio float64) []float64 {
+	var attackCount int
+	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
+	var std float64
+	var standard_error float64
+	for attackCount = 0; attackCount < max_attackLoop; attackCount++ {
+		var successNum = attackParties(P, currentEncRatio)         // Integer result of one attack run.
+		successCounts = append(successCounts, float64(successNum)) // Stores the success count for this run.
+
+		// NOTE: These calculations are for internal stopping conditions, not for statistical purposes.
+		std, _ = calculateStandardDeviationAndMean(successCounts)
+		standard_error = std / math.Sqrt(float64(len(successCounts)))
+		if standard_error <= 0.01 && attackCount >= 100 { // Stop attack earliy if results stabilise
+			attackCount++
+			break
+		}
+	}
+	return successCounts
+}
+
+func attackParties(P []*Party, currentEncRatio float64) (attackSuccessNum int) {
+	attackSuccessNum = 0
+
+	var valid = false
+	var randomParty int
+	var randomStart int
+
+	if uniqueATD == 0 { // If the user wants the attacker block to be randomly chosen.
+		randomParty = getRandom(maxHouseholdsNumber)
+		randomStart = getRandomStart(randomParty)
+	} else {
+		for !valid {
+			randomParty = getRandom(maxHouseholdsNumber)
+			randomStart = getRandomStart(randomParty)
+			var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+			if uniqueDataBlock(P, attacker_data_block, randomParty, randomStart, "rawInput") {
+				valid = true
+			}
+		}
+	}
+
+	var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+
+	var matched_households = identifyParty(P, attacker_data_block, randomParty, randomStart, currentEncRatio)
+	if len(matched_households) == 1 && matched_households[0] == randomParty {
+		attackSuccessNum++
+	}
+	return
+}
+
+// getRandomStart is a helper function that returns an unused random start block/section for the Party
+func getRandomStart(party int) int {
+	var valid bool = false
+
+	var randomStart int
+
+	for !valid {
+		randomStart = getRandom(MAX_PARTY_ROWS - atdSize)
+		if !contains(party, randomStart) {
+			usedRandomStartPartyPairs[party] = append(usedRandomStartPartyPairs[party], randomStart)
+			valid = true
+		}
+	}
+	return randomStart
+}
+
+// contains is a helper function that checks if the Party has used the random start block/section before.
+func contains(party int, randomStart int) bool {
+	var contains bool = false
+
+	val, exists := usedRandomStartPartyPairs[party]
+
+	if exists {
+		for _, v := range val {
+			if v == randomStart {
+				contains = true
+			}
+		}
+	}
+
+	return contains
+}
+
+// uniqueDataBlock is a helper function that checks if the data block is unique in the dataset.
+func uniqueDataBlock(P []*Party, arr []float64, party int, index int, input_type string) bool {
+	var unique bool = true
+
+	for pn, po := range P {
+		if pn == party {
+			continue
+		}
+		if input_type == "rawInput" {
+			var household_data = po.rawInput
+			for i := 0; i < len(household_data)-atdSize+1; i++ {
+				var target = household_data[i : i+atdSize]
+				if reflect.DeepEqual(target, arr) {
+					unique = false
+					usedRandomStartPartyPairs[pn] = append(usedRandomStartPartyPairs[pn], i)
+					break
+				}
+			}
+		} else {
+			for _, household_section := range po.encryptedInput {
+				for i := 0; i < len(household_section)-atdSize+1; i++ {
+					var target = household_section[i : i+atdSize]
+					if reflect.DeepEqual(target, arr) {
+						unique = false
+						usedRandomStartPartyPairs[pn] = append(usedRandomStartPartyPairs[pn], i)
+						break
+					}
+				}
+				if !unique {
+					break
+				}
+			}
+		}
+		if !unique {
+			break
+		}
+	}
+	return unique
+}
+
+func identifyParty(P []*Party, attackerRawBlock []float64, originalPartyIdx int, originalRawIndex int, currentEncRatio float64) []int {
+	var matched_households = []int{}
+
+	var precision float64
+	var epsilon float64
+	if currentEncRatio <= 0.3 {
+		precision = 100
+		epsilon = 0.5 / precision
+	} else if currentEncRatio <= 0.7 {
+		precision = 10
+		epsilon = 0.5 / precision
+	} else {
+		precision = 1
+		epsilon = 0.5 / precision
+	}
+
+	simulatedEncryptedBlock := make([]float64, len(attackerRawBlock))
+	copy(simulatedEncryptedBlock, attackerRawBlock)
+
+	for j := range simulatedEncryptedBlock {
+		simulatedEncryptedBlock[j] *= (1.0 - currentEncRatio)
+		simulatedEncryptedBlock[j] = float64(math.Round(simulatedEncryptedBlock[j]*precision) / precision)
+	}
+
+	// Minimum length of the array to be considered a match.
+	var min_length int = int(math.Ceil(float64(len(simulatedEncryptedBlock)) * float64(min_percent_matched) / 100))
+
+	// Iterate through ALL parties and ALL their encrypted data blocks to find a match.
+	for partyIdx, currentParty := range P {
+		for sectionIdx := 0; sectionIdx < len(currentParty.encryptedInput); sectionIdx++ {
+			encryptedSection := currentParty.encryptedInput[sectionIdx]
+
+			// Iterate through all possible starting positions for a block of `atdSize` within this section.
+			for startOffset := 0; startOffset <= len(encryptedSection)-atdSize; startOffset++ {
+				candidateEncryptedBlock := encryptedSection[startOffset : startOffset+atdSize]
+
+				var isBlockMatch bool
+
+				if min_length == len(simulatedEncryptedBlock) { // Case: Exact match required.
+					isBlockMatch = compareFloatSlices(simulatedEncryptedBlock, candidateEncryptedBlock, epsilon)
+				} else { // Case: Percentage match allowed
+					matchCount := 0
+					mismatchCount := 0
+					for k := 0; k < len(simulatedEncryptedBlock); k++ {
+						if math.Abs(simulatedEncryptedBlock[k]-candidateEncryptedBlock[k]) < epsilon {
+							matchCount++
+						} else {
+							mismatchCount++
+						}
+						if mismatchCount > (len(simulatedEncryptedBlock) - min_length) {
+							break
+						}
+					}
+					isBlockMatch = float64(matchCount)/float64(len(simulatedEncryptedBlock)) >= float64(min_percent_matched)/100.0
+				}
+
+				if isBlockMatch {
+					// If uniqueATD == 0, check for uniqueness of the *candidateEncryptedBlock* among *other parties' encrypted data*
+					// To check if this specific block that matched is "unique enough" to count as a successful identification.
+					if uniqueATD == 0 {
+						if uniqueDataBlocks(P, [][]float64{candidateEncryptedBlock}, partyIdx, startOffset, min_length, epsilon) {
+							matched_households = append(matched_households, partyIdx)
+							goto NextParty // Found a unique match for this party, move to next party
+						}
+					} else {
+						matched_households = append(matched_households, partyIdx)
+						goto NextParty // Found a match, move to next party
+					}
+				}
+			}
+		}
+	NextParty:
+	}
+
+	// Deduplicate matched_households if a Party can be matched multiple times for unique IDs
+	uniqueMatches := make(map[int]bool)
+	var finalMatchedHouseholds []int
+	for _, id := range matched_households {
+		if !uniqueMatches[id] {
+			uniqueMatches[id] = true
+			finalMatchedHouseholds = append(finalMatchedHouseholds, id)
+		}
+	}
+
+	return finalMatchedHouseholds
+}
+
+// compareFloatSlices checks if two float64 slices are approximately equal within an epsilon.
+func compareFloatSlices(slice1, slice2 []float64, epsilon float64) bool {
+	if len(slice1) != len(slice2) {
+		return false
+	}
+	for i := 0; i < len(slice1); i++ {
+		if math.Abs(slice1[i]-slice2[i]) > epsilon {
+			return false
+		}
+	}
+	return true
+}
+
+// uniqueDataBlocks is a helper function that checks if the data blocks/sections is unique in the dataset.
+func uniqueDataBlocks(P []*Party, pos_matches [][]float64, party int, index int, min_length int, epsilon float64) bool {
+	var unique bool = true
+
+	for pn, po := range P {
+		if pn == party {
+			continue // Skip the current Party, as we're checking uniqueness against *other* parties
+		}
+		for _, household_section := range po.encryptedInput { // Iterate through each section of the other Party's encrypted input
+			for i := 0; i <= len(household_section)-min_length; i++ {
+				var target = household_section[i : i+min_length] // A block from another Party's encrypted data
+
+				for _, pos_match := range pos_matches {
+					if compareFloatSlices(target, pos_match, epsilon) {
+						unique = false // Found a duplicate in another Party, so it's not unique.
+						break          // Exit inner loop (no need to check other pos_matches)
+					}
+				}
+				if !unique {
+					break // Break middle loop (no need to check other blocks in this section)
+				}
+			}
+			if !unique {
+				break // Break outer loop (no need to check other sections of this Party)
+			}
+		}
+		if !unique {
+			break // Break outermost loop (no need to check other parties)
+		}
+	}
+	return unique
+}
+
+func calculateStandardDeviationAndMean(numbers []float64) (float64, float64) {
+	var sum float64
+	for _, num := range numbers {
+		sum += num
+	}
+	mean := sum / float64(len(numbers))
+
+	var squaredDifferences float64
+	for _, num := range numbers {
+		difference := num - mean
+		squaredDifferences += difference * difference
+	}
+
+	variance := squaredDifferences / (float64(len(numbers)) - 1)
+
+	standardDeviation := math.Sqrt(variance)
+
+	return standardDeviation, mean
 }
