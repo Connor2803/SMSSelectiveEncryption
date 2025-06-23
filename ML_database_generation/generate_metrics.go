@@ -19,10 +19,15 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
+}
 
 func check(err error) {
 	if err != nil {
@@ -51,17 +56,19 @@ type Party struct {
 } // Struct to represent an individual household
 
 type SectionsMetrics struct {
-	HouseholdCSVFileName    string
-	SectionNumber           int
-	DateRange               string // DD-MM-YYYY to DD-MM-YYYY
-	SectionSumUsage         float64
-	EncryptionRatio         float64
-	RawEntropy              float64 // Per-section, pre-encryption entropy value
-	RemainingEntropy        float64 // Per-section, post-encryption entropy value
-	ASRMean                 float64
-	ASRStandardError        float64
-	ASRDuration             time.Duration // Total time for the entire attack to run.
-	AvgPerAttackRunDuration float64       // Average time for a single attack to run.
+	HouseholdCSVFileName      string
+	SectionNumber             int
+	DateRange                 string // DD-MM-YYYY to DD-MM-YYYY
+	SectionSumUsage           float64
+	EncryptionRatio           float64
+	RawEntropy                float64 // Per-section, pre-encryption entropy value
+	RemainingEntropy          float64 // Per-section, post-encryption entropy value
+	ASRMean                   float64
+	ASRStandardError          float64
+	ASRDuration               time.Duration // Total time for the entire attack to run (in seconds).
+	AvgPerAttackRunDuration   float64       // Average time for a single attack to run (in seconds).
+	ProgramAllocatedMemoryMiB float64       // Program's allocated memory in MiB for this ratio
+
 } // Struct to represent a section/block in an individual household
 
 type ResultKey struct {
@@ -177,6 +184,7 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 		"asr_standard_error",
 		"asr_attack_duration",
 		"avg_time_per_attack_run",
+		"allocated_memory_MiB",
 	})
 	check(err)
 
@@ -269,6 +277,13 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 			}
 		}
 
+		// --- 2.5 Homomorphic Computations Phase --
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		currentAllocatedMemMiB := float64(bToMb(m.Alloc))
+
+		// NOTE: Added to allResults in later statement!
+
 		// --- 3. Attack Phase --
 		// Reset house_sample for each encryption ratio iteration to collect new ASRs
 		currentRatioAttackResults := []float64{} // Contains the results of each attack loop for a given encryption ratio.
@@ -317,6 +332,8 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 				tempResult.ASRDuration = asrAttackDuration
 				tempResult.AvgPerAttackRunDuration = avgTimePerAttackRun
 
+				tempResult.ProgramAllocatedMemoryMiB = currentAllocatedMemMiB
+
 				allResults[key] = tempResult
 			}
 		}
@@ -336,6 +353,7 @@ func process(fileList []string, params ckks.Parameters, writer *csv.Writer) {
 			fmt.Sprintf("%.6f", result.ASRStandardError),
 			fmt.Sprintf("%.6f", result.ASRDuration.Seconds()),
 			fmt.Sprintf("%.6f", result.AvgPerAttackRunDuration),
+			fmt.Sprintf("%.2f", result.ProgramAllocatedMemoryMiB),
 		})
 		check(err)
 	}
