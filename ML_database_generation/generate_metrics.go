@@ -91,7 +91,7 @@ var globalPartyRows = -1
 var encryptedSectionNum int
 
 var max_attackLoop = 1000 // Default value for number of loops for membershipIdentificationAttack.
-var atdSize = 24          // Element number of unique attacker data
+var atdSize = 12          // Element number of unique attacker data
 var uniqueATD int = 0     // Unique attacker data, 1 for true, 0 for false
 var usedRandomStartPartyPairs = map[int][]int{}
 var min_percent_matched = 90 // Default value for minimum percentage match for identification.
