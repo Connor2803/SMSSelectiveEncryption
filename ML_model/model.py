@@ -6,19 +6,55 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 import random
+import time
+import csv
 
 
 def main():
     env_train = EncryptionSelectorEnv(dataset_type="train")
-    model = DQN("MlpPolicy", env_train, verbose=1)
-    model.learn(total_timesteps=10000, log_interval=4)
-    model.save("dqn_encryption_selector")
+
+    log_file_name = "training_log.csv"
+    csv_file = None
+    csv_writer = None
+
+    try:
+        # Open the CSV file for writing (will overwrite if exists)
+        csv_file = open(log_file_name, 'w', newline='')
+        csv_writer = csv.writer(csv_file)
+        # Write the header row for your log file
+        csv_writer.writerow(
+            ["Episode", "Total Reward", "Average ASR Mean", "Average Attack Duration", "Average Remaining Entropy",
+             "Average Memory MiB"])
+
+        start_time = time.time()  # Record start time
+        print(f"Training started at: {time.ctime(start_time)}")
+
+        model = DQN("MlpPolicy", env_train, verbose=1)
+        # For actual per-episode logging, you would pass a custom callback to .learn()
+        # model.learn(total_timesteps=10000, log_interval=4, callback=MyCustomCallback(csv_writer))
+        # For simplicity here, we'll just let model.learn handle its own logging,
+        # and you can parse its output or access its logger later if needed.
+        # If you need precise per-episode data written to *your* CSV, a custom callback is required.
+        model.learn(total_timesteps=10000, log_interval=4)
+        model.save("dqn_encryption_selector")
+
+        end_time = time.time()  # Record end time
+        print(f"Training finished at: {time.ctime(end_time)}")
+        elapsed_time = end_time - start_time
+        print(f"Total training duration: {elapsed_time:.2f} seconds")
+
+    except Exception as e:
+        print(f"An error occurred during training: {e}")
+    finally:
+        if csv_file:
+            csv_file.close()
 
     del model
 
     model = DQN.load("dqn_encryption_selector")
 
     obs, info = env_train.reset()
+
     while True:
         action, _states = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env_train.step(action)
@@ -137,6 +173,8 @@ class EncryptionSelectorEnv(gym.Env):
         # Map the action to the encryption ratio chosen by the agent.
         encryption_ratio = self._encryption_ratios[action]
 
+
+        # Select reward parameters based on the chosen encryption ratio and household ID.
         metrics_row = self._df[
             (self._df["filename"] == self._current_household_ID) &
             (self._df["encryption_ratio"] == encryption_ratio)
@@ -147,6 +185,7 @@ class EncryptionSelectorEnv(gym.Env):
         current_remaining_entropy = metrics_row["remaining_entropy"].sum()
         current_memory = metrics_row["allocated_memory_MiB"].mean()
 
+        # Scale the reward parameters using pre-established MinMaxScaler.
         scaled_current_asr_attack_duration = self._asr_duration_scalar.transform(np.array([[current_asr_attack_duration]]))[0][0]
         scaled_current_asr_mean = self._asr_mean_scalar.transform(np.array([[current_asr_mean]]))[0][0]
         scaled_current_remaining_entropy = self._remaining_entropy_scalar.transform(np.array([[current_remaining_entropy]]))[0][0]
