@@ -1,6 +1,8 @@
 from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
+from stable_baselines3.dqn.policies import MultiInputPolicy
+from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -8,59 +10,6 @@ from sklearn import preprocessing
 import random
 import time
 import csv
-
-
-def main():
-    env_train = EncryptionSelectorEnv(dataset_type="train")
-
-    log_file_name = "training_log.csv"
-    csv_file = None
-    csv_writer = None
-
-    try:
-        # Open the CSV file for writing (will overwrite if exists)
-        csv_file = open(log_file_name, 'w', newline='')
-        csv_writer = csv.writer(csv_file)
-        # Write the header row for your log file
-        csv_writer.writerow(
-            ["Episode", "Total Reward", "Average ASR Mean", "Average Attack Duration", "Average Remaining Entropy",
-             "Average Memory MiB"])
-
-        start_time = time.time()  # Record start time
-        print(f"Training started at: {time.ctime(start_time)}")
-
-        model = DQN("MlpPolicy", env_train, verbose=1)
-        # For actual per-episode logging, you would pass a custom callback to .learn()
-        # model.learn(total_timesteps=10000, log_interval=4, callback=MyCustomCallback(csv_writer))
-        # For simplicity here, we'll just let model.learn handle its own logging,
-        # and you can parse its output or access its logger later if needed.
-        # If you need precise per-episode data written to *your* CSV, a custom callback is required.
-        model.learn(total_timesteps=10000, log_interval=4)
-        model.save("dqn_encryption_selector")
-
-        end_time = time.time()  # Record end time
-        print(f"Training finished at: {time.ctime(end_time)}")
-        elapsed_time = end_time - start_time
-        print(f"Total training duration: {elapsed_time:.2f} seconds")
-
-    except Exception as e:
-        print(f"An error occurred during training: {e}")
-    finally:
-        if csv_file:
-            csv_file.close()
-
-    del model
-
-    model = DQN.load("dqn_encryption_selector")
-
-    obs, info = env_train.reset()
-
-    while True:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env_train.step(action)
-        if terminated or truncated:
-            obs, info = env_train.reset()
-
 
 class EncryptionSelectorEnv(gym.Env):
     def __init__(self, dataset_type="train"):
@@ -80,7 +29,7 @@ class EncryptionSelectorEnv(gym.Env):
         validation_households, testing_households = train_test_split(validation_and_testing_households, test_size=0.5,
                                                                      random_state=42, shuffle=True)
 
-        self._active_households = None # This will store the list of households for the current phase
+        self._active_households = None  # This will store the list of households for the current phase
 
         # Populate training, validation, and testing dataframes based on the split household IDs.
         training_df = df[df["filename"].isin(training_households)]
@@ -141,7 +90,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._asr_mean_scalar = asr_mean_scaler.fit(self._df[["asr_mean"]])
 
         remaining_entropy_scaler = preprocessing.MinMaxScaler()
-        self._remaining_entropy_scalar = remaining_entropy_scaler.fit(self._df[["section_remaining_entropy"]])
+        self._remaining_entropy_scalar = remaining_entropy_scaler.fit(self._df.groupby("filename")["section_remaining_entropy"].sum().to_frame())
 
         memory_scaler = preprocessing.MinMaxScaler()
         self._memory_scalar = memory_scaler.fit(self._df[["allocated_memory_MiB"]])
@@ -173,39 +122,51 @@ class EncryptionSelectorEnv(gym.Env):
         # Map the action to the encryption ratio chosen by the agent.
         encryption_ratio = self._encryption_ratios[action]
 
-
         # Select reward parameters based on the chosen encryption ratio and household ID.
         metrics_row = self._df[
             (self._df["filename"] == self._current_household_ID) &
             (self._df["encryption_ratio"] == encryption_ratio)
-        ]
+            ]
 
         current_asr_attack_duration = metrics_row["asr_attack_duration"].mean()
         current_asr_mean = metrics_row["asr_mean"].mean()
-        current_remaining_entropy = metrics_row["remaining_entropy"].sum()
+        current_remaining_entropy = metrics_row["section_remaining_entropy"].sum()
         current_memory = metrics_row["allocated_memory_MiB"].mean()
 
         # Scale the reward parameters using pre-established MinMaxScaler.
-        scaled_current_asr_attack_duration = self._asr_duration_scalar.transform(np.array([[current_asr_attack_duration]]))[0][0]
-        scaled_current_asr_mean = self._asr_mean_scalar.transform(np.array([[current_asr_mean]]))[0][0]
-        scaled_current_remaining_entropy = self._remaining_entropy_scalar.transform(np.array([[current_remaining_entropy]]))[0][0]
-        scaled_current_memory = self._memory_scalar.transform(np.array([[current_memory]]))[0][0]
+        scaled_current_asr_attack_duration = \
+        self._asr_duration_scalar.transform(pd.DataFrame([[current_asr_attack_duration]]))[0][0]
+        scaled_current_asr_mean = self._asr_mean_scalar.transform(pd.DataFrame([[current_asr_mean]]))[0][0]
+        scaled_current_remaining_entropy = \
+        self._remaining_entropy_scalar.transform(pd.DataFrame([[current_remaining_entropy]]))[0][0]
+        scaled_current_memory = self._memory_scalar.transform(pd.DataFrame([[current_memory]]))[0][0]
 
         observation = self._get_observation()
-        info = self._get_info()
+        info = {
+            "household_id": self._current_household_ID,
+            "selected_encryption_ratio": encryption_ratio,
+            "scaled_asr_attack_duration": scaled_current_asr_attack_duration,
+            "scaled_asr_mean": scaled_current_asr_mean,
+            "scaled_remaining_entropy": scaled_current_remaining_entropy,
+            "scaled_memory": scaled_current_memory,
+        }
 
-        w1, w2, w3, w4 = 1, 1, 1, 1 # TODO: Fine tune later!
+        w1, w2, w3, w4 = 1, 1, 1, 1  # TODO: Fine tune later!
 
-        reward = w1 * scaled_current_asr_attack_duration - w2 * scaled_current_asr_mean + w3 * scaled_current_remaining_entropy - w4 * scaled_current_memory
+        # Positive contribution: asr_attack_duration,
+        # Negative contribution: scaled_current_asr_mean, scaled_current_remaining_entropy, and scaled_current_memory.
+
+        reward = w1 * scaled_current_asr_attack_duration - w2 * scaled_current_asr_mean - w3 * scaled_current_remaining_entropy - w4 * scaled_current_memory
 
         terminated = True  # As this is a single-step episode.
-        truncated = False
+        truncated = False  # As this is a single-step episode.
 
         return observation, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self._current_household_id = random.choice(self._active_households) # NOTE: Will re-vist already seen households for training.
+        self._current_household_ID = random.choice(
+            self._active_households)  # NOTE: Will re-vist already seen households for training.
 
         return self._get_observation(), self._get_info()
 
@@ -213,5 +174,144 @@ class EncryptionSelectorEnv(gym.Env):
         pass
 
 
+class CustomCallback(BaseCallback):
+    """
+    A custom callback that derives from ``BaseCallback``.
+
+    :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
+    """
+
+    def __init__(self, csv_writer, verbose: int = 0):
+        super().__init__(verbose)
+        self.csv_writer = csv_writer
+        self._episode_num = 0
+
+    def _on_training_start(self) -> None:
+        """
+        This method is called before the first rollout starts.
+        """
+        pass
+
+    def _on_rollout_start(self) -> None:
+        """
+        A rollout is the collection of environment interaction
+        using the current policy.
+        This event is triggered before collecting new samples.
+        """
+        pass
+
+    def _on_step(self) -> bool:
+        """
+        This method will be called by the model after each call to `env.step()`.
+
+        For child callback (of an `EventCallback`), this will be called
+        when the event is triggered.
+
+        :return: If the callback returns False, training is aborted early.
+        """
+
+        # self.locals contains variables accessible in the current step.
+        # self.locals['dones'] is a boolean list (for vectorized envs) indicating if an env is done, i.e., the outcome of each step: truncated or terminated.
+        # self.locals['infos'] is a list of info dictionaries, one per env.
+        # self.locals['rewards'] is a list of rewards for the current step.
+
+        for idx, done in enumerate(self.locals['dones']):
+            if done:
+                self._episode_num += 1
+
+                info = self.locals['infos'][idx]
+
+                total_reward = self.locals['rewards'][idx]
+
+                household_id = info.get("household_id", "N/A")
+                selected_encryption_ratio = info.get("selected_encryption_ratio", "N/A")
+                scaled_asr_attack_duration = info.get("scaled_asr_attack_duration", 0)
+                scaled_asr_mean = info.get("scaled_asr_mean", 0)
+                scaled_remaining_entropy = info.get("scaled_remaining_entropy", 0)
+                scaled_memory = info.get("scaled_memory", 0)
+
+                # Write the row to the CSV file
+                self.csv_writer.writerow([
+                    self._episode_num,
+                    household_id,
+                    total_reward,
+                    selected_encryption_ratio,
+                    scaled_asr_attack_duration,
+                    scaled_asr_mean,
+                    scaled_remaining_entropy,
+                    scaled_memory
+                ])
+                if self.verbose > 0:
+                    print(
+                        f"Logged episode {self._episode_num} for Household {household_id} with reward {total_reward:.4f}")
+
+        return True
+
+    def _on_rollout_end(self) -> None:
+        """
+        This event is triggered before updating the policy.
+        """
+        pass
+
+    def _on_training_end(self) -> None:
+        """
+        This event is triggered before exiting the `learn()` method.
+        """
+        pass
+
+
+def main():
+    env_train = EncryptionSelectorEnv(dataset_type="train")
+
+    log_file_name = "training_log.csv"
+    csv_file = None
+    csv_writer = None
+
+    try:
+        csv_file = open(log_file_name, 'w', newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(
+            ["Episode",
+             "HouseholdID",
+             "Total Reward",
+             "Selected Encryption Ratio",
+             "Average Attack Duration",
+             "Average ASR Mean",
+             "Sum Remaining Entropy",
+             "Average Memory MiB"
+        ])
+
+        start_time = time.time()
+        print(f"Training started at: {time.ctime(start_time)}")
+
+        model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
+        model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=1))
+        model.save("dqn_encryption_selector")
+
+        end_time = time.time()
+        print(f"Training finished at: {time.ctime(end_time)}")
+        elapsed_time = end_time - start_time
+        print(f"Total training duration: {elapsed_time:.2f} seconds")
+
+    except Exception as e:
+        print(f"An error occurred during training: {e}")
+    finally:
+        if csv_file:
+            csv_file.close()
+            print(f"Training log saved to {log_file_name}")
+
+    del model
+
+    # model = DQN.load("dqn_encryption_selector")
+    #
+    # obs, info = env_train.reset()
+    #
+    # while True:
+    #     action, _states = model.predict(obs, deterministic=True)
+    #     obs, reward, terminated, truncated, info = env_train.step(action)
+    #     if terminated or truncated:
+    #         obs, info = env_train.reset()
+
 if __name__ == "__main__":
     main()
+
