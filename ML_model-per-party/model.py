@@ -1,3 +1,5 @@
+# python model.py
+
 from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -11,6 +13,7 @@ import random
 import time
 import csv
 
+
 class EncryptionSelectorEnv(gym.Env):
     def __init__(self, dataset_type="train"):
         super().__init__()
@@ -18,13 +21,14 @@ class EncryptionSelectorEnv(gym.Env):
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Read the ML metrics CSV file for Water dataset.
-        df = pd.read_csv("../ML_database_generation/ML_metrics_WATER.csv", header=0)
+        df = pd.read_csv("../ML_database_generation-per-party/ML_metrics_WATER.csv", header=0)
+        df_HE = pd.read_csv("../ML_database_generation-per-party/ML_party-metrics_WATER.csv", header=0)
 
         # Retrieve the unique household IDs from the Water dataset.
         unique_household_IDs = df["filename"].unique()
 
-        # Split the dataset into training, validation, and testing household IDs based on the unique household IDs to keep each household data in tact.
-        training_households, validation_and_testing_households = train_test_split(unique_household_IDs, test_size=0.6,
+        # Split the dataset into training, validation, and testing household IDs based on the unique household IDs to keep each household data intact.
+        training_households, validation_and_testing_households = train_test_split(unique_household_IDs, test_size=0.25,
                                                                                   random_state=42, shuffle=True)
         validation_households, testing_households = train_test_split(validation_and_testing_households, test_size=0.5,
                                                                      random_state=42, shuffle=True)
@@ -33,20 +37,27 @@ class EncryptionSelectorEnv(gym.Env):
 
         # Populate training, validation, and testing dataframes based on the split household IDs.
         training_df = df[df["filename"].isin(training_households)]
+        training_df_HE = df_HE[df_HE["filename"].isin(training_households)]
         validation_df = df[df["filename"].isin(validation_households)]
+        validation_df_HE = df_HE[df_HE["filename"].isin(validation_households)]
         testing_df = df[df["filename"].isin(testing_households)]
+        testing_df_HE = df_HE[df_HE["filename"].isin(testing_households)]
 
         # Assign dataframes and household IDs as instance attributes.
         self._df = df
+        self._df_HE = df_HE
         self._unique_households = unique_household_IDs
         self._training_df = training_df
+        self._training_df_HE = training_df_HE
         self._validation_df = validation_df
+        self._validation_df_HE = validation_df_HE
         self._testing_df = testing_df
+        self._testing_df_HE = testing_df_HE
         self._training_households = training_households
         self._validation_households = validation_households
         self._testing_households = testing_households
 
-        self._active_households = None  # This will store the list of households for the current phase
+        self._active_households = None  # This will store the list of households for the current phase.
 
         if dataset_type == 'train':
             self._active_households = self._training_households
@@ -90,10 +101,31 @@ class EncryptionSelectorEnv(gym.Env):
         self._asr_mean_scalar = asr_mean_scaler.fit(self._df[["asr_mean"]])
 
         remaining_entropy_scaler = preprocessing.MinMaxScaler()
-        self._remaining_entropy_scalar = remaining_entropy_scaler.fit(self._df.groupby("filename")["section_remaining_entropy"].sum().to_frame())
+        self._remaining_entropy_scalar = remaining_entropy_scaler.fit(
+            self._df.groupby("filename")["section_remaining_entropy"].sum().to_frame())
 
         memory_scaler = preprocessing.MinMaxScaler()
         self._memory_scalar = memory_scaler.fit(self._df[["allocated_memory_MiB"]])
+
+        summation_error_scaler = preprocessing.MinMaxScaler()
+        self._summation_error_scaler = summation_error_scaler.fit(abs(self._df_HE[["summation_error"]]))
+
+        deviation_error_scaler = preprocessing.MinMaxScaler()
+        self._deviation_error_scaler = deviation_error_scaler.fit(abs(self._df_HE[["deviation_error"]]))
+
+        encryption_time_scaler = preprocessing.MinMaxScaler()
+        self._encryption_time_scaler = encryption_time_scaler.fit(self._df_HE[["encryption_time_ns"]])
+
+        decryption_time_scaler = preprocessing.MinMaxScaler()
+        self._decryption_time_scaler = decryption_time_scaler.fit(self._df_HE[["decryption_time_ns"]])
+
+        summation_operations_time_scaler = preprocessing.MinMaxScaler()
+        self._summation_operations_time_scaler = summation_operations_time_scaler.fit(
+            self._df_HE[["summation_operations_time_ns"]])
+
+        deviation_operations_time_scaler = preprocessing.MinMaxScaler()
+        self._deviation_operations_time_scaler = deviation_operations_time_scaler.fit(
+            self._df_HE[["deviation_operations_time_ns"]])
 
         # Actions are discrete integers that describe the action to be taken by the agent.
         # We have 9 discrete actions, corresponding to the 9 encryption ratios.
@@ -128,18 +160,53 @@ class EncryptionSelectorEnv(gym.Env):
             (self._df["encryption_ratio"] == encryption_ratio)
             ]
 
+        party_row = self._df_HE[
+            (self._df_HE["filename"] == self._current_household_ID) &
+            (self._df_HE["encryption_ratio"] == encryption_ratio)
+            ]
+
         current_asr_attack_duration = metrics_row["asr_attack_duration"].mean()
         current_asr_mean = metrics_row["asr_mean"].mean()
         current_remaining_entropy = metrics_row["section_remaining_entropy"].sum()
         current_memory = metrics_row["allocated_memory_MiB"].mean()
 
+        current_summation_error = party_row["summation_error"].iloc[0]
+        current_deviation_error = party_row["deviation_error"].iloc[0]
+        current_encryption_time = party_row["encryption_time_ns"].iloc[0]
+        current_decryption_time = party_row["decryption_time_ns"].iloc[0]
+        current_summation_operations_time = party_row["summation_operations_time_ns"].iloc[0]
+        current_deviation_operations_time = party_row["deviation_operations_time_ns"].iloc[0]
+
         # Scale the reward parameters using pre-established MinMaxScaler.
         scaled_current_asr_attack_duration = \
-        self._asr_duration_scalar.transform(pd.DataFrame([[current_asr_attack_duration]]))[0][0]
-        scaled_current_asr_mean = self._asr_mean_scalar.transform(pd.DataFrame([[current_asr_mean]]))[0][0]
+            self._asr_duration_scalar.transform(
+                pd.DataFrame([[current_asr_attack_duration]], columns=["asr_attack_duration"]))[0][0]
+        scaled_current_asr_mean = \
+        self._asr_mean_scalar.transform(pd.DataFrame([[current_asr_mean]], columns=["asr_mean"]))[0][0]
         scaled_current_remaining_entropy = \
-        self._remaining_entropy_scalar.transform(pd.DataFrame([[current_remaining_entropy]]))[0][0]
-        scaled_current_memory = self._memory_scalar.transform(pd.DataFrame([[current_memory]]))[0][0]
+            self._remaining_entropy_scalar.transform(
+                pd.DataFrame([[current_remaining_entropy]], columns=["section_remaining_entropy"]))[0][0]
+        scaled_current_memory = \
+        self._memory_scalar.transform(pd.DataFrame([[current_memory]], columns=["allocated_memory_MiB"]))[0][0]
+
+        scaled_current_summation_error = \
+            self._summation_error_scaler.transform(
+                pd.DataFrame([[abs(current_summation_error)]], columns=["summation_error"]))[0][0]
+        scaled_current_deviation_error = \
+            self._deviation_error_scaler.transform(
+                pd.DataFrame([[abs(current_deviation_error)]], columns=["deviation_error"]))[0][0]
+        scaled_current_encryption_time = \
+            self._encryption_time_scaler.transform(
+                pd.DataFrame([[current_encryption_time]], columns=["encryption_time_ns"]))[0][0]
+        scaled_current_decryption_time = \
+            self._decryption_time_scaler.transform(
+                pd.DataFrame([[current_decryption_time]], columns=["decryption_time_ns"]))[0][0]
+        scaled_current_summation_operations_time = \
+            self._summation_operations_time_scaler.transform(
+                pd.DataFrame([[current_summation_operations_time]], columns=["summation_operations_time_ns"]))[0][0]
+        scaled_current_deviation_operations_time = \
+            self._deviation_operations_time_scaler.transform(
+                pd.DataFrame([[current_deviation_operations_time]], columns=["deviation_operations_time_ns"]))[0][0]
 
         observation = self._get_observation()
         info = {
@@ -149,14 +216,21 @@ class EncryptionSelectorEnv(gym.Env):
             "scaled_asr_mean": scaled_current_asr_mean,
             "scaled_remaining_entropy": scaled_current_remaining_entropy,
             "scaled_memory": scaled_current_memory,
+
+            "scaled_summation_error": scaled_current_summation_error,
+            "scaled_deviation_error": scaled_current_deviation_error,
+            "scaled_encryption_time": scaled_current_encryption_time,
+            "scaled_decryption_time": scaled_current_decryption_time,
+            "scaled_summation_operations_time": scaled_current_summation_operations_time,
+            "scaled_deviation_operations_time": scaled_current_deviation_operations_time,
         }
 
-        w1, w2, w3, w4 = 1, 1, 1, 1  # TODO: Fine tune later!
+        w_asr_attack_time = 1.2
 
-        # Positive contribution: asr_attack_duration,
-        # Negative contribution: scaled_current_asr_mean, scaled_current_remaining_entropy, and scaled_current_memory.
+        # Positive contribution: asr_attack_duration, decryption_time
+        # Negative contribution: scaled_current_asr_mean, scaled_current_remaining_entropy, scaled_current_memory, summation_error, deviation_error, encryption_time, summation_operations_time, deviation_operations_time
 
-        reward = w1 * scaled_current_asr_attack_duration - w2 * scaled_current_asr_mean - w3 * scaled_current_remaining_entropy - w4 * scaled_current_memory
+        reward = (w_asr_attack_time * scaled_current_asr_attack_duration) + scaled_current_decryption_time - scaled_current_asr_mean - scaled_current_remaining_entropy - scaled_current_memory - scaled_current_summation_error - scaled_current_deviation_error - scaled_current_encryption_time - scaled_current_summation_operations_time - scaled_current_deviation_operations_time
 
         terminated = True  # As this is a single-step episode.
         truncated = False  # As this is a single-step episode.
@@ -185,20 +259,6 @@ class CustomCallback(BaseCallback):
         super().__init__(verbose)
         self.csv_writer = csv_writer
         self._episode_num = 0
-
-    def _on_training_start(self) -> None:
-        """
-        This method is called before the first rollout starts.
-        """
-        pass
-
-    def _on_rollout_start(self) -> None:
-        """
-        A rollout is the collection of environment interaction
-        using the current policy.
-        This event is triggered before collecting new samples.
-        """
-        pass
 
     def _on_step(self) -> bool:
         """
@@ -230,16 +290,33 @@ class CustomCallback(BaseCallback):
                 scaled_remaining_entropy = info.get("scaled_remaining_entropy", 0)
                 scaled_memory = info.get("scaled_memory", 0)
 
+                scaled_summation_error = info.get("scaled_summation_error", 0)
+                scaled_deviation_error = info.get("scaled_deviation_error", 0)
+                scaled_encryption_time = info.get("scaled_encryption_time", 0)
+                scaled_decryption_time = info.get("scaled_decryption_time", 0)
+                scaled_summation_operations_time = info.get("scaled_summation_operations_time", 0)
+                scaled_deviation_operations_time = info.get("scaled_deviation_operations_time", 0)
+
                 # Write the row to the CSV file
                 self.csv_writer.writerow([
                     self._episode_num,
                     household_id,
                     total_reward,
+
+                    # Calculated from section-level statistics.
                     selected_encryption_ratio,
                     scaled_asr_attack_duration,
                     scaled_asr_mean,
                     scaled_remaining_entropy,
-                    scaled_memory
+                    scaled_memory,
+
+                    # Per-party level statistics.
+                    scaled_summation_error,
+                    scaled_deviation_error,
+                    scaled_encryption_time,
+                    scaled_decryption_time,
+                    scaled_summation_operations_time,
+                    scaled_deviation_operations_time,
                 ])
                 if self.verbose > 0:
                     print(
@@ -247,22 +324,31 @@ class CustomCallback(BaseCallback):
 
         return True
 
-    def _on_rollout_end(self) -> None:
-        """
-        This event is triggered before updating the policy.
-        """
-        pass
-
-    def _on_training_end(self) -> None:
-        """
-        This event is triggered before exiting the `learn()` method.
-        """
-        pass
-
+def log_to_csv(writer, episode_num, household_id, reward, info):
+    """Helper function to write a row to the CSV log file."""
+    writer.writerow([
+        episode_num,
+        household_id,
+        reward,
+        info.get("selected_encryption_ratio", "N/A"),
+        info.get("scaled_asr_attack_duration", 0),
+        info.get("scaled_asr_mean", 0),
+        info.get("scaled_remaining_entropy", 0),
+        info.get("scaled_memory", 0),
+        info.get("scaled_summation_error", 0),
+        info.get("scaled_deviation_error", 0),
+        info.get("scaled_encryption_time", 0),
+        info.get("scaled_decryption_time", 0),
+        info.get("scaled_summation_operations_time", 0),
+        info.get("scaled_deviation_operations_time", 0),
+    ])
 
 def main():
+
+    # ----- TRAINING PHASE ------
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
+    # Training file log creation
     log_file_name = "training_log.csv"
     csv_file = None
     csv_writer = None
@@ -278,14 +364,20 @@ def main():
              "Average Attack Duration",
              "Average ASR Mean",
              "Sum Remaining Entropy",
-             "Average Memory MiB"
-        ])
+             "Average Memory MiB",
+             "Summation Error",
+             "Deviation Error",
+             "Encryption Time",
+             "Decryption Time",
+             "Summation Operations Time",
+             "Deviation Operations Time",
+             ])
 
         start_time = time.time()
         print(f"Training started at: {time.ctime(start_time)}")
 
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
-        model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=1))
+        model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
         model.save("dqn_encryption_selector")
 
         end_time = time.time()
@@ -302,16 +394,65 @@ def main():
 
     del model
 
-    # model = DQN.load("dqn_encryption_selector")
-    #
-    # obs, info = env_train.reset()
-    #
-    # while True:
-    #     action, _states = model.predict(obs, deterministic=True)
-    #     obs, reward, terminated, truncated, info = env_train.step(action)
-    #     if terminated or truncated:
-    #         obs, info = env_train.reset()
+    log_headers = [
+        "Episode", "HouseholdID", "Total Reward", "Selected Encryption Ratio",
+        "Average Attack Duration", "Average ASR Mean", "Sum Remaining Entropy",
+        "Average Memory MiB", "Summation Error", "Deviation Error",
+        "Encryption Time", "Decryption Time", "Summation Operations Time",
+        "Deviation Operations Time"
+    ]
+
+    # ----- VALIDATION PHASE ------
+    print("\n--- Starting Validation ---")
+    model = DQN.load("dqn_encryption_selector")
+    env_val = EncryptionSelectorEnv(dataset_type="validation")
+    num_validation_households = len(env_val._active_households)
+
+    with open('validation_log.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(log_headers)
+
+        obs, info = env_val.reset()
+        for i in range(num_validation_households):
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info_step = env_val.step(action)
+
+            household_id = info_step.get('household_id')
+            print(
+                f"Validated Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
+
+            log_to_csv(writer, i + 1, household_id, reward, info_step)
+
+            if terminated or truncated:
+                obs, info = env_val.reset()
+
+    print("\nValidation log saved to validation_log.csv")
+
+    # ----- TESTING PHASE ------
+    print("\n--- Starting Testing ---")
+    env_test = EncryptionSelectorEnv(dataset_type="test")
+    num_testing_households = len(env_test._active_households)
+
+    with open('testing_log-ASR-weighted.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(log_headers)
+
+        obs, info = env_test.reset()
+        for i in range(num_testing_households):
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info_step = env_test.step(action)
+
+            household_id = info_step.get('household_id')
+            print(
+                f"Tested Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
+
+            log_to_csv(writer, i + 1, household_id, reward, info_step)
+
+            if terminated or truncated:
+                obs, info = env_test.reset()
+
+    print("\nTesting log saved to testing_log.csv")
+
 
 if __name__ == "__main__":
     main()
-
