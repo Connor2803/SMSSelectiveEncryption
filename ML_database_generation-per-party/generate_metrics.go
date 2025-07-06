@@ -452,48 +452,6 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 }
 
-// This function encrypts each section individually across all parties at a given encryption ratio.
-// It applies the ratio to a single section per Party, then computes and stores the remaining entropy
-// for that section, leaving all other sections untouched. This enables ML training on section × ratio combinations.
-func markEncryptedSectionsByHousehold(encRatio float64, P []*Party, metrics *[]SectionsMetrics) {
-	for pi, po := range P {
-		// Loop through each section to apply the encryption ratio and calculate entropy
-		for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
-			// Create a temporary copy of the raw input for this section
-			tempSectionInput := make([]float64, sectionSize)
-			copy(tempSectionInput, po.rawInput[sectionIdx*sectionSize:(sectionIdx+1)*sectionSize])
-
-			// Apply the encryption ratio to the temporary section data
-			for i := range tempSectionInput {
-				tempSectionInput[i] *= (1.0 - encRatio)
-			}
-
-			// Calculate the remaining entropy for this modified section
-			sectionEntropy := 0.0
-			frequency := make(map[float64]int)
-			for _, val := range tempSectionInput {
-				roundedVal := math.Round(val*1000) / 1000
-				frequency[roundedVal]++
-			}
-
-			total := float64(len(tempSectionInput))
-			for _, count := range frequency {
-				if count > 0 {
-					p := float64(count) / total
-					sectionEntropy -= p * math.Log2(p)
-				}
-			}
-
-			// Update the metrics for the current section
-			metricIndex := pi*sectionNum + sectionIdx
-			if metricIndex < len(*metrics) {
-				(*metrics)[metricIndex].RemainingEntropy = sectionEntropy
-				(*metrics)[metricIndex].EncryptionRatio = encRatio
-			}
-		}
-	}
-}
-
 // File Reading
 func readCSV(path string) []string {
 	data, err := os.ReadFile(path)
