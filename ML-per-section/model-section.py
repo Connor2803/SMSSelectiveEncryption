@@ -171,11 +171,15 @@ class EncryptionSelectorEnv(gym.Env):
             lambda x: json.loads(x))
 
         # Split the dataset into training, validation, and testing household IDs based on the household IDs.
-        training_households, validation_and_testing_households = train_test_split(self._df["Household ID"],
+        training_households_array, validation_and_testing_households_array = train_test_split(self._df["Household ID"],
                                                                                   test_size=0.25,
                                                                                   random_state=42, shuffle=True)
-        validation_households, testing_households = train_test_split(validation_and_testing_households, test_size=0.5,
+        validation_households_array, testing_households_array = train_test_split(validation_and_testing_households_array, test_size=0.5,
                                                                      random_state=42, shuffle=True)
+
+        training_households = training_households_array.tolist()
+        validation_households = validation_households_array.tolist()
+        testing_households = testing_households_array.tolist()
 
         self._active_households = None  # This will store the list of households for the current phase
 
@@ -201,6 +205,8 @@ class EncryptionSelectorEnv(gym.Env):
             self._active_households = self._testing_households
         else:
             raise ValueError("dataset_type must be 'train', 'validation', or 'test'")
+
+        self._current_household_idx = 0
 
         self._chosen_encryption_ratios = {}
 
@@ -453,9 +459,9 @@ class EncryptionSelectorEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self._current_household_idx = random.randint(0, len(self._active_households) - 1)
+        if self._active_households and self._current_household_idx >= len(self._active_households):
+            self._current_household_idx = 0
 
-        self._current_household_idx = 0
         self._current_section_idx_in_household = 0
         self._household_ids_processed_in_phase = []
         self._chosen_encryption_ratios = {}
