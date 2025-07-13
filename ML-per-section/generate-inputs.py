@@ -34,16 +34,15 @@ def main():
                     try:
                         utility_readings_current_file.append(float(row[-1]))
                         utility_reading_dates_current_file.append(row[0])
+                        rows_read_in_file += 1
                     except (ValueError, IndexError) as e:
                         print(f"Skipping malformed row in {file_path}: {row}. Error: {e}")
                         rows_read_in_file += 1
                         continue
 
-                    # Reverse the lists so the oldest readings are at the beginning.
-                    utility_readings_current_file.reverse()
-                    utility_reading_dates_current_file.reverse()
-                    rows_read_in_file += 1
-
+            # Reverse the lists so the oldest readings are at the beginning.
+            utility_readings_current_file.reverse()
+            utility_reading_dates_current_file.reverse()
             num_sections = (len(utility_readings_current_file) + SECTION_SIZE - 1) // SECTION_SIZE
 
             for i in range(num_sections):

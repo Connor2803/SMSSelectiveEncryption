@@ -1,0 +1,674 @@
+/*
+running command:
+go run .\ML-per-section\generate_metrics.go
+> Run this command for the Water dataset.
+*/
+
+package main
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/rlwe"
+	utils "lattigo"
+	"log"
+	"math"
+	"math/rand"
+	"os"
+	"reflect"
+	"runtime"
+	"strconv"
+	"time"
+)
+
+type RLChoice struct {
+	HouseholdID      string    `json:"household_id"`
+	SectionNumber    int       `json:"section_number"`
+	Ratio            float64   `json:"ratio"`
+	RawEntropy       float64   `json:"raw_entropy"`
+	RemainingEntropy float64   `json:"remaining_entropy"`
+	UtilityReadings  []float64 `json:"original_utility_readings"`
+} // RLChoice structure sent from the Python script.
+
+type GoMetrics struct {
+	GlobalASRDurationNS     int64                        `json:"globalASRDurationNS"`
+	GlobalASRMean           float64                      `json:"globalASRMean"`
+	GlobalMemoryConsumption float64                      `json:"globalMemoryConsumptionMiB"`
+	AllPartyLevelMetrics    map[string]PartyLevelMetrics `json:"allPartyMetrics"` // Keyed by Household ID
+} // Struct that will be returned from this Go program back to the RL model to calculate the final reward.
+
+type PartyLevelMetrics struct {
+	SummationError     float64 `json:"summationError"`
+	DeviationError     float64 `json:"deviationError"`
+	EncryptionTimeNS   int64   `json:"encryptionTimeNS"`
+	DecryptionTimeNS   int64   `json:"decryptionTimeNS"`
+	SummationOpsTimeNS int64   `json:"summationOpsTimeNS"`
+	DeviationOpsTimeNS int64   `json:"deviationOpsTimeNS"`
+}
+type Party struct {
+	householdID             string
+	sections                map[int]*Section // map[SectionNumber]*Section
+	summationError          float64
+	deviationError          float64
+	encryptionTime          time.Duration
+	decryptionTime          time.Duration
+	summationOperationsTime time.Duration
+	deviationOperationsTime time.Duration
+} // Struct to represent an individual household.
+
+type Section struct {
+	readings                 []float64    // The unprocessed individual water meter readings in the section.
+	encryptedReadings        []float64    // The encrypted individual meter readings in the section.
+	encryptedReadingsIndices map[int]bool // The encrypted readings indexes in the original unprocessed readings slice.
+	unencryptedReadings      []float64    // The plain-text individual meter readings in the section.
+	expSummation             float64      // The sum of the individual water meter readings in the section.
+	expAverage               float64      // The sum of the individual water meter readings in the section divided by the number of meter readings in the section.
+	expDeviation             float64      // The standard deviation of the individual water meter readings in the section.
+	encryptionRatio          float64      // The RL model chosen encryption ratio for the section.
+	plainSum                 float64      // The sum of the plaintext individual water meter readings in the section.
+} // Section holds data for a single block of water meter readings of a household.
+
+const MAXPARTYROWS = 10240                         // Maximum number of water meter readings to be included in the experiment from the original dataset.
+const MAXSECTIONNUMBER = 10                        /// Maximum number of sections to be included in a household (each section will contain MAXPARTYROWS / SECTIONSIZE reading entries).
+const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
+var maxAttackLoop = 1000                           // Default value for number of loops for membershipIdentificationAttack.
+var atdSize = 12                                   // Number of water meter readings included in the leaked attacker data
+var minPercentMatched = 90                         // Default value for minimum percentage match for identification.
+var usedRandomSectionsByParty = map[string][]int{} // 2D slice to hold which household sections have been used as the attacker block.
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func getRandom(numberRange int) (randNumber int) {
+	randNumber = rand.Intn(numberRange) //[0, numberRange-1]
+	return
+}
+
+func main() {
+	// 1. Get input file path from command-line arguments.
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: ./generate_metrics <path_to_rl_choices.json>")
+	}
+	rlChoicesPath := os.Args[1]
+
+	// 2. Read the RL agent's choices from the JSON file
+	choices, err := readRLChoices(rlChoicesPath)
+	check(err)
+
+	// 3. Load raw data from the master inputs.csv file
+	parties, err := loadDataFromInputsCSV("./inputs.csv", choices)
+	check(err)
+
+	// 4. Perform Homomorphic Encryption (HE) cost simulation
+	paramsDef := utils.PN10QP27CI
+	params, err := ckks.NewParametersFromLiteral(paramsDef)
+	check(err)
+	doHomomorphicOperations(params, parties)
+
+	// 5. Run memory consumption function.
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	globalAllocatedMemMiB := float64(bToMb(m.Alloc))
+
+	// 5. Run the Member Identification Attack simulation
+	asrMean := 0.0
+	startASRTime := time.Now()
+	attackResult := memberIdentificationAttack(parties)
+
+	if len(attackResult) > 0 {
+		// Convert success counts to ASRs (Attack Success Rates)
+		var asrRates []float64
+		totalAttackableInstancesPerRun := float64(len(parties))
+		if totalAttackableInstancesPerRun == 0 {
+			fmt.Println("ERROR: totalAttackableInstancesPerRun is 0. Cannot calculate ASR.")
+		} else {
+			for _, successCount := range attackResult {
+				asrRates = append(asrRates, successCount/totalAttackableInstancesPerRun)
+			}
+		}
+
+		_, mean, _ := calculateStandardDeviationAndMeanAndVariance(asrRates)
+		asrMean = mean
+	}
+	endASRTime := time.Now()
+	asrTotalDuration := endASRTime.Sub(startASRTime)
+	asrDurationPerLoopNS := int64(0)
+	if len(attackResult) > 0 {
+		asrDurationPerLoopNS = asrTotalDuration.Nanoseconds() / int64(len(attackResult))
+	}
+
+	// 6. Prepare the final metrics and print to stdout as JSON
+	finalPartyMetrics := make(map[string]PartyLevelMetrics)
+
+	for partyID, partyData := range parties {
+		finalPartyMetrics[partyID] = PartyLevelMetrics{
+			SummationError:     partyData.summationError,
+			DeviationError:     partyData.deviationError,
+			EncryptionTimeNS:   partyData.encryptionTime.Nanoseconds(),
+			DecryptionTimeNS:   partyData.decryptionTime.Nanoseconds(),
+			SummationOpsTimeNS: partyData.summationOperationsTime.Nanoseconds(),
+			DeviationOpsTimeNS: partyData.deviationOperationsTime.Nanoseconds(),
+		}
+	}
+
+	finalResults := GoMetrics{
+		GlobalASRMean:           asrMean,
+		GlobalASRDurationNS:     asrDurationPerLoopNS,
+		GlobalMemoryConsumption: globalAllocatedMemMiB,
+		AllPartyLevelMetrics:    finalPartyMetrics,
+	}
+
+	output, err := json.Marshal(finalResults)
+	check(err)
+	fmt.Println(string(output)) // This is captured by the Python script.
+}
+
+// readRLChoices parses the JSON file created by the Python script.
+func readRLChoices(path string) ([]RLChoice, error) {
+	file, err := os.ReadFile(path)
+	check(err)
+	var choices []RLChoice
+	err = json.Unmarshal(file, &choices)
+	check(err)
+	return choices, nil
+}
+
+// loadDataFromInputsCSV reads the master CSV and organises data into Parties and Sections.
+func loadDataFromInputsCSV(path string, choices []RLChoice) (map[string]*Party, error) {
+	file, err := os.Open(path)
+	check(err)
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	check(err)
+
+	// Create a lookup map for RL choices using same key.
+	choiceMap := make(map[string]float64) // key: "householdID-sectionNum"
+	for _, c := range choices {
+		key := fmt.Sprintf("%s-%d", c.HouseholdID, c.SectionNumber)
+		choiceMap[key] = c.Ratio
+	}
+
+	parties := make(map[string]*Party)
+	// Skip header row (i=0)
+	for i := 1; i < len(records); i++ {
+		record := records[i]
+		householdID := record[0]
+		sectionNum, _ := strconv.Atoi(record[1])
+
+		// Find the party or create a new one
+		if _, ok := parties[householdID]; !ok {
+			parties[householdID] = &Party{
+				householdID: householdID,
+				sections:    make(map[int]*Section),
+			}
+		}
+		party := parties[householdID]
+
+		// Get the readings for this section (stored as a JSON string array in CSV).
+		var readings []float64
+		if err := json.Unmarshal([]byte(record[4]), &readings); err != nil {
+			log.Printf("Warning: Skipping malformed readings in row %d: %v", i, err)
+			continue
+		}
+
+		// Get the encryption ratio for this specific section from the RL agent's choices,
+		key := fmt.Sprintf("%s-%d", householdID, sectionNum)
+		ratio, ok := choiceMap[key]
+		if !ok {
+			log.Printf("Warning: No ratio found for household %s section %d. Skipping.", householdID, sectionNum)
+			continue
+		}
+
+		// Sum the readings array to calculate the utility usage for the section.
+		sumUsage := 0.0
+		for _, reading := range readings {
+			sumUsage += reading
+		}
+
+		stdUsage, avgUsage, _ := calculateStandardDeviationAndMeanAndVariance(readings)
+
+		party.sections[sectionNum] = &Section{
+			readings:        readings,
+			expSummation:    sumUsage,
+			expAverage:      avgUsage,
+			expDeviation:    stdUsage,
+			encryptionRatio: ratio,
+		}
+	}
+	return parties, nil
+}
+
+func doHomomorphicOperations(params ckks.Parameters, parties map[string]*Party) {
+	// Key Generation Variables.
+	tkgen := ckks.NewKeyGenerator(params)
+	var tsk *rlwe.SecretKey
+	var tpk *rlwe.PublicKey
+
+	tsk = tkgen.GenSecretKey()
+	tpk = tkgen.GenPublicKey(tsk)
+
+	var rlk *rlwe.RelinearizationKey
+	rlk = tkgen.GenRelinearizationKey(tsk, 1)
+
+	rotations := params.RotationsForInnerSum(1, SECTIONSIZE)
+	var rotk *rlwe.RotationKeySet
+	rotk = tkgen.GenRotationKeysForRotations(rotations, false, tsk)
+
+	decryptor := ckks.NewDecryptor(params, tsk)
+	encoder := ckks.NewEncoder(params)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotk})
+
+	// Generate ciphertexts by calling performHEEncryption helper encryption function.
+	encOutputs, encInputsSummation, encInputsNegative := performHEEncryption(params, parties, tpk, encoder)
+
+	// Decryption Timing
+	for partyID, partyCiphers := range encOutputs {
+		if len(partyCiphers) > 0 {
+			start := time.Now()
+			for _, ct := range partyCiphers {
+				_ = decryptor.DecryptNew(ct)
+			}
+			parties[partyID].decryptionTime = time.Since(start)
+		}
+	}
+
+	// Summation calculations ====================================================
+	encSummationOuts := make(map[string]*rlwe.Ciphertext)
+	for partyID, partySections := range encInputsSummation {
+		if len(partySections) == 0 {
+			continue
+		}
+		partySummationOpsStart := time.Now()
+
+		tmpCiphertext := partySections[0]
+		for j := 1; j < len(partySections); j++ {
+			evaluator.Add(tmpCiphertext, partySections[j], tmpCiphertext)
+		}
+
+		evaluator.InnerSum(tmpCiphertext, 1, params.Slots(), tmpCiphertext)
+
+		parties[partyID].summationOperationsTime = time.Since(partySummationOpsStart)
+		encSummationOuts[partyID] = tmpCiphertext
+	}
+
+	// Deviation calculation ====================================================
+	encDeviationOuts := make(map[string]*rlwe.Ciphertext)
+	for partyID, party := range encInputsNegative {
+		if len(party) == 0 || encSummationOuts[partyID] == nil {
+			continue
+		}
+		partyDeviationOpsStart := time.Now()
+
+		avgCiphertext := encSummationOuts[partyID].CopyNew()
+		avgCiphertext.Scale = avgCiphertext.Scale.Mul(rlwe.NewScale(SECTIONSIZE))
+
+		var aggregatedDeviation *rlwe.Ciphertext
+
+		for sectionIndex, sectionCipher := range party {
+			// Step 1: Subtract the average from the value (by adding the negative value).
+			currentDeviation := evaluator.AddNew(sectionCipher, avgCiphertext)
+
+			// Step 2: Square the result.
+			evaluator.MulRelin(currentDeviation, currentDeviation, currentDeviation)
+
+			// Step 3: Aggregate the squared differences.
+			if sectionIndex == 0 {
+				aggregatedDeviation = currentDeviation
+			} else {
+				evaluator.Add(aggregatedDeviation, currentDeviation, aggregatedDeviation)
+			}
+		}
+
+		// Step 4: Perform the final InnerSum (rotation) on the aggregated result.
+		evaluator.InnerSum(aggregatedDeviation, 1, params.Slots(), aggregatedDeviation)
+
+		aggregatedDeviation.Scale = aggregatedDeviation.Scale.Mul(rlwe.NewScale(len(parties)))
+		encDeviationOuts[partyID] = aggregatedDeviation
+		parties[partyID].deviationOperationsTime = time.Since(partyDeviationOpsStart)
+	}
+
+	// Collect Errors ===============================================
+	ptresSummation := ckks.NewPlaintext(params, params.MaxLevel())
+	for partyID, partyData := range parties {
+		var sumErr float64
+		for _, section := range partyData.sections {
+			if encSummationOuts[partyID] != nil {
+				decryptor.Decrypt(encSummationOuts[partyID], ptresSummation)
+				resSummation := encoder.Decode(ptresSummation, params.LogSlots())
+				totalCKKSSum := real(resSummation[0]) + section.plainSum
+				err := totalCKKSSum - section.expSummation
+				sumErr += math.Abs(err) // Total summation error per section, per household/party.
+			}
+		}
+		parties[partyID].summationError = sumErr
+	}
+
+	ptresDeviation := ckks.NewPlaintext(params, params.MaxLevel())
+	for partyID, partyData := range parties {
+		var devErr float64
+		for _, section := range partyData.sections {
+			if encDeviationOuts[partyID] != nil {
+				decryptor.Decrypt(encDeviationOuts[partyID], ptresDeviation)
+				resDeviation := encoder.Decode(ptresDeviation, params.LogSlots())
+				err := real(resDeviation[0]) - section.expDeviation
+				devErr += math.Abs(err) // Total deviation error per section, per household/party.
+			}
+		}
+		parties[partyID].deviationError = devErr
+	}
+
+	return
+}
+
+// encPhase is a helper function that encrypts the plaintext inputs for each party and returns their encrypted values.
+// It also collects the time taken for each party's encryption.
+func performHEEncryption(params ckks.Parameters, parties map[string]*Party, pk *rlwe.PublicKey, encoder ckks.Encoder) (encOutputs, encInputsSummation, encInputsNegative map[string][]*rlwe.Ciphertext) {
+
+	encOutputs = make(map[string][]*rlwe.Ciphertext)
+	encInputsSummation = make(map[string][]*rlwe.Ciphertext)
+	encInputsNegative = make(map[string][]*rlwe.Ciphertext)
+
+	// Each party encrypts its input vector.
+	encryptor := ckks.NewEncryptor(params, pk)
+	pt := ckks.NewPlaintext(params, params.MaxLevel())
+
+	for partyID, party := range parties {
+		start := time.Now() // Start timing for the current party (pi).
+
+		for sectionIndex, section := range party.sections {
+			if sectionIndex == 0 { // This ensures the inner slices are initialized once per party.
+				encOutputs[partyID] = make([]*rlwe.Ciphertext, 0)
+				encInputsSummation[partyID] = make([]*rlwe.Ciphertext, 0)
+				encInputsNegative[partyID] = make([]*rlwe.Ciphertext, 0)
+			}
+			readings := section.readings
+			encryptCount := int(float64(len(readings)) * section.encryptionRatio)
+			if encryptCount == 0 {
+				continue
+			}
+			tmpEncryptedReadings := make([]float64, encryptCount)
+			encryptedIndices := make(map[int]bool, encryptCount)
+			perm := rand.Perm(len(readings))[:encryptCount]
+			for i, idx := range perm {
+				tmpEncryptedReadings[i] = readings[idx] // Encrypt a random percentage sample of the readings within a section according to the RL model assigned encryption ratio.
+				encryptedIndices[idx] = true
+			}
+
+			// Encrypt original input.
+			encoder.Encode(tmpEncryptedReadings, pt, params.LogSlots())
+			tmpCiphertext := ckks.NewCiphertext(params, 1, params.MaxLevel())
+			encryptor.Encrypt(pt, tmpCiphertext)
+			encOutputs[partyID] = append(encOutputs[partyID], tmpCiphertext)
+			encInputsSummation[partyID] = append(encInputsSummation[partyID], tmpCiphertext)
+
+			// Turn po.input to negative for HE operations (subtraction and deviation).
+			negReadings := make([]float64, len(tmpEncryptedReadings))
+			for i, val := range tmpEncryptedReadings {
+				negReadings[i] = -val
+			}
+
+			// Encrypt negative input.
+			encoder.Encode(negReadings, pt, params.LogSlots())
+			tmpCiphertext = ckks.NewCiphertext(params, 1, params.MaxLevel())
+			encryptor.Encrypt(pt, tmpCiphertext)
+			encInputsNegative[partyID] = append(encInputsNegative[partyID], tmpCiphertext)
+
+			plainSum := 0.0
+			tmpPlaintTextReadings := make([]float64, 0, len(readings))
+			for idx, val := range readings {
+				if !encryptedIndices[idx] {
+					plainSum += val
+					tmpPlaintTextReadings = append(tmpPlaintTextReadings, val)
+				}
+			}
+			section.plainSum = plainSum
+			section.encryptedReadings = tmpEncryptedReadings
+			section.encryptedReadingsIndices = encryptedIndices
+			section.unencryptedReadings = tmpPlaintTextReadings
+
+		}
+		parties[partyID].encryptionTime = time.Since(start)
+	}
+	return encOutputs, encInputsSummation, encInputsNegative
+}
+
+func memberIdentificationAttack(parties map[string]*Party) []float64 {
+	var attackCount int
+	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
+	var std float64
+	var standardError float64
+
+	partyIDs := make([]string, 0, len(parties))
+	for id := range parties {
+		partyIDs = append(partyIDs, id)
+	}
+
+	for attackCount = 0; attackCount < maxAttackLoop; attackCount++ {
+		var successNum = attackParties(parties, partyIDs)          // Integer result of one attack run.
+		successCounts = append(successCounts, float64(successNum)) // Stores the success count for this run.
+
+		// NOTE: These calculations are for internal stopping conditions, not for statistical purposes.
+		std, _, _ = calculateStandardDeviationAndMeanAndVariance(successCounts)
+		standardError = std / math.Sqrt(float64(len(successCounts)))
+		if standardError <= 0.01 && attackCount >= 100 { // Stop attack earlier if results stabilise.
+			attackCount++
+			break
+		}
+	}
+	return successCounts
+}
+
+func attackParties(parties map[string]*Party, partyIDs []string) (attackSuccessNum int) {
+	attackSuccessNum = 0
+
+	var valid bool
+	var randomPartyID string
+	var randomSectionIndex, offset int
+	var attackerDataBlock []float64
+
+	for !valid {
+		randomPartyID = partyIDs[rand.Intn(len(partyIDs))]
+		randomSectionIndex = getRandomSection(randomPartyID)
+
+		section, ok := parties[randomPartyID].sections[randomSectionIndex]
+		if !ok || len(section.readings) < atdSize {
+			continue
+		}
+
+		offset = getRandom(len(section.readings) - atdSize + 1)
+		attackerDataBlock = section.readings[offset : offset+atdSize]
+
+		if uniqueDataBlock(parties, attackerDataBlock, randomPartyID, randomSectionIndex, "sections") {
+			valid = true
+		}
+	}
+
+	matchedHouseholds := identifyParty(parties, attackerDataBlock)
+	if len(matchedHouseholds) == 1 && matchedHouseholds[0] == randomPartyID {
+		attackSuccessNum++
+	}
+	return attackSuccessNum
+}
+
+// getRandomSection is a helper function that returns an unused random start block/section for the Party
+func getRandomSection(partyID string) int {
+	var valid bool = false
+	var randomSection int
+
+	for !valid {
+		randomSection = getRandom(MAXSECTIONNUMBER)
+		if !contains(partyID, randomSection) {
+			usedRandomSectionsByParty[partyID] = append(usedRandomSectionsByParty[partyID], randomSection)
+			valid = true
+		}
+	}
+	return randomSection
+}
+
+// contains is a helper function that checks if the Party has used the random start block/section before.
+func contains(partyID string, randomStart int) bool {
+	var contains bool = false
+
+	val, exists := usedRandomSectionsByParty[partyID]
+
+	if exists {
+		for _, v := range val {
+			if v == randomStart {
+				contains = true
+			}
+		}
+	}
+
+	return contains
+}
+
+// uniqueDataBlock is a helper function that checks if the data block is unique in the dataset.
+func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string, sectionIndex int, inputType string) bool {
+	var unique bool = true
+
+	for partyID, partyData := range parties {
+		if partyID == partyName {
+			continue
+		}
+		if inputType == "sections" {
+			// Only compare to the same section index.
+			section, ok := partyData.sections[sectionIndex]
+			if !ok || len(section.readings) < atdSize {
+				continue
+			}
+			householdData := section.readings
+			for i := 0; i < len(householdData)-atdSize+1; i++ {
+				var target = householdData[i : i+atdSize]
+				if reflect.DeepEqual(target, arr) {
+					unique = false
+					usedRandomSectionsByParty[partyID] = append(usedRandomSectionsByParty[partyID], i)
+					break
+				}
+			}
+		} else {
+			// Compare to all sections in the party.
+			for _, section := range partyData.sections {
+				readings := section.readings
+				if len(readings) < atdSize {
+					continue
+				}
+				for i := 0; i < len(readings)-atdSize+1; i++ {
+					var target = readings[i : i+atdSize]
+					if reflect.DeepEqual(target, arr) {
+						unique = false
+						usedRandomSectionsByParty[partyID] = append(usedRandomSectionsByParty[partyID], i)
+						break
+					}
+				}
+				if !unique {
+					break
+				}
+			}
+		}
+		if !unique {
+			break
+		}
+	}
+	return unique
+}
+
+func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64) []string {
+	var matchedHouseholds []string
+
+	// Match threshold: # of elements that must match.
+	minMatchCount := math.Ceil(float64(atdSize) * float64(minPercentMatched) / 100)
+
+	for partyID, party := range parties {
+		for _, section := range party.sections {
+			encReadings := section.encryptedReadings
+			if len(encReadings) == 0 {
+				continue
+			}
+
+			// Attacker encrypts their leaked plain-text block with the same encryption transformation used by the system.
+			simulatedEncryptedBlock := make([]float64, len(attackerPlainTextBlock))
+			copy(simulatedEncryptedBlock, attackerPlainTextBlock)
+
+			for leakedReadings := range simulatedEncryptedBlock {
+				simulatedEncryptedBlock[leakedReadings] *= (1.0 - section.encryptionRatio)
+			}
+
+			// Determine epsilon tolerance based on encryption ratio.
+			var precision float64
+			switch {
+			case section.encryptionRatio <= 0.3:
+				precision = 100
+			case section.encryptionRatio <= 0.7:
+				precision = 10
+			default:
+				precision = 1
+			}
+			for leakedReadings := range simulatedEncryptedBlock {
+				simulatedEncryptedBlock[leakedReadings] = math.Round(simulatedEncryptedBlock[leakedReadings]*precision) / precision
+			}
+			epsilon := 0.5 / precision
+			targetEncryptedBlock := section.encryptedReadings // The current encrypted section that the attacker is trying to match theirs to.
+
+			n := min(len(simulatedEncryptedBlock), len(targetEncryptedBlock))
+			if n == 0 {
+				continue
+			}
+			matchCount := 0
+
+			for k := 0; k < n; k++ {
+				if math.Abs(simulatedEncryptedBlock[k]-targetEncryptedBlock[k]) < epsilon {
+					matchCount++
+				}
+			}
+
+			if float64(matchCount) >= minMatchCount {
+				matchedHouseholds = append(matchedHouseholds, partyID)
+				goto NextParty // Found a match, stop checking other sections for this party.
+			}
+		}
+	NextParty:
+	}
+
+	// Deduplicate party matches.
+	unique := make(map[string]bool)
+	var finalMatches []string
+	for _, id := range matchedHouseholds {
+		if !unique[id] {
+			unique[id] = true
+			finalMatches = append(finalMatches, id)
+		}
+	}
+
+	return finalMatches
+}
+
+func calculateStandardDeviationAndMeanAndVariance(numbers []float64) (standardDeviation, mean, variance float64) {
+	var sum float64
+	for _, num := range numbers {
+		sum += num
+	}
+	mean = sum / float64(len(numbers))
+
+	var squaredDifferences float64
+	for _, num := range numbers {
+		difference := num - mean
+		squaredDifferences += difference * difference
+	}
+
+	variance = squaredDifferences / (float64(len(numbers)) - 1)
+
+	standardDeviation = math.Sqrt(variance)
+
+	return standardDeviation, mean, variance
+}
