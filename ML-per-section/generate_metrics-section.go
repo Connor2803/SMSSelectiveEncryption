@@ -33,10 +33,10 @@ type RLChoice struct {
 } // RLChoice structure sent from the Python script.
 
 type GoMetrics struct {
-	GlobalASRDurationNS     int64                        `json:"globalASRDurationNS"`
-	GlobalASRMean           float64                      `json:"globalASRMean"`
-	GlobalMemoryConsumption float64                      `json:"globalMemoryConsumptionMiB"`
-	AllPartyLevelMetrics    map[string]PartyLevelMetrics `json:"allPartyMetrics"` // Keyed by Household ID
+	GlobalReidentificationDurationNS int64                        `json:"globalReidentificationDurationNS"`
+	GlobalReidentificationRate       float64                      `json:"globalReidentificationRate"`
+	GlobalMemoryConsumption          float64                      `json:"globalMemoryConsumptionMiB"`
+	AllPartyLevelMetrics             map[string]PartyLevelMetrics `json:"allPartyMetrics"` // Keyed by Household ID
 } // Struct that will be returned from this Go program back to the RL model to calculate the final reward.
 
 type PartyLevelMetrics struct {
@@ -73,9 +73,9 @@ type Section struct {
 const MAXPARTYROWS = 10240                         // Maximum number of water meter readings to be included in the experiment from the original dataset.
 const MAXSECTIONNUMBER = 10                        /// Maximum number of sections to be included in a household (each section will contain MAXPARTYROWS / SECTIONSIZE reading entries).
 const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
-var maxAttackLoop = 1000                           // Default value for number of loops for membershipIdentificationAttack.
-var atdSize = 12                                   // Number of water meter readings included in the leaked attacker data
-var minPercentMatched = 90                         // Default value for minimum percentage match for identification.
+var maxReidentificationAttempts = 1000             // Default value for number of loops for runReidentificationAttack.
+var leakedPlaintextSize = 12                       // Number of water meter readings included in the leaked attacker data
+var reidentificationMatchThreshold = 90            // Default value for minimum percentage match for identification.
 var usedRandomSectionsByParty = map[string][]int{} // 2D slice to hold which household sections have been used as the attacker block.
 
 func bToMb(b uint64) uint64 {
@@ -120,30 +120,30 @@ func main() {
 	globalAllocatedMemMiB := float64(bToMb(m.Alloc))
 
 	// 5. Run the Member Identification Attack simulation
-	asrMean := 0.0
-	startASRTime := time.Now()
-	attackResult := memberIdentificationAttack(parties)
+	reidentificationRate := 0.0
+	startReidentificationTime := time.Now()
+	reidentificationResult := runReidentificationAttack(parties)
 
-	if len(attackResult) > 0 {
+	if len(reidentificationResult) > 0 {
 		// Convert success counts to ASRs (Attack Success Rates)
-		var asrRates []float64
+		var reidentificationRates []float64
 		totalAttackableInstancesPerRun := float64(len(parties))
 		if totalAttackableInstancesPerRun == 0 {
 			fmt.Println("ERROR: totalAttackableInstancesPerRun is 0. Cannot calculate ASR.")
 		} else {
-			for _, successCount := range attackResult {
-				asrRates = append(asrRates, successCount/totalAttackableInstancesPerRun)
+			for _, successCount := range reidentificationResult {
+				reidentificationRates = append(reidentificationRates, successCount/totalAttackableInstancesPerRun)
 			}
 		}
 
-		_, mean, _ := calculateStandardDeviationAndMeanAndVariance(asrRates)
-		asrMean = mean
+		_, mean, _ := calculateStandardDeviationAndMeanAndVariance(reidentificationRates)
+		reidentificationRate = mean
 	}
-	endASRTime := time.Now()
-	asrTotalDuration := endASRTime.Sub(startASRTime)
-	asrDurationPerLoopNS := int64(0)
-	if len(attackResult) > 0 {
-		asrDurationPerLoopNS = asrTotalDuration.Nanoseconds() / int64(len(attackResult))
+	endReidentificationTime := time.Now()
+	reidentificationTotalDuration := endReidentificationTime.Sub(startReidentificationTime)
+	reidentificationDurationPerLoopNS := int64(0)
+	if len(reidentificationResult) > 0 {
+		reidentificationDurationPerLoopNS = reidentificationTotalDuration.Nanoseconds() / int64(len(reidentificationResult))
 	}
 
 	// 6. Prepare the final metrics and print to stdout as JSON
@@ -161,10 +161,10 @@ func main() {
 	}
 
 	finalResults := GoMetrics{
-		GlobalASRMean:           asrMean,
-		GlobalASRDurationNS:     asrDurationPerLoopNS,
-		GlobalMemoryConsumption: globalAllocatedMemMiB,
-		AllPartyLevelMetrics:    finalPartyMetrics,
+		GlobalReidentificationRate:       reidentificationRate,
+		GlobalReidentificationDurationNS: reidentificationDurationPerLoopNS,
+		GlobalMemoryConsumption:          globalAllocatedMemMiB,
+		AllPartyLevelMetrics:             finalPartyMetrics,
 	}
 
 	output, err := json.Marshal(finalResults)
@@ -179,6 +179,10 @@ func readRLChoices(path string) ([]RLChoice, error) {
 	var choices []RLChoice
 	err = json.Unmarshal(file, &choices)
 	check(err)
+	fmt.Fprintf(os.Stderr, "DEBUG: readRLChoices - Successfully read %d choices from %s\n", len(choices), path)
+	if len(choices) > 0 {
+		fmt.Fprintf(os.Stderr, "DEBUG: First choice: HouseholdID=%s, SectionNumber=%d, Ratio=%f\n", choices[0].HouseholdID, choices[0].SectionNumber, choices[0].Ratio)
+	}
 	return choices, nil
 }
 
@@ -194,9 +198,12 @@ func loadDataFromInputsCSV(path string, choices []RLChoice) (map[string]*Party, 
 
 	// Create a lookup map for RL choices using same key.
 	choiceMap := make(map[string]float64) // key: "householdID-sectionNum"
+	chosenHouseholdIDs := make(map[string]bool)
+
 	for _, c := range choices {
 		key := fmt.Sprintf("%s-%d", c.HouseholdID, c.SectionNumber)
 		choiceMap[key] = c.Ratio
+		chosenHouseholdIDs[c.HouseholdID] = true
 	}
 
 	parties := make(map[string]*Party)
@@ -205,6 +212,10 @@ func loadDataFromInputsCSV(path string, choices []RLChoice) (map[string]*Party, 
 		record := records[i]
 		householdID := record[0]
 		sectionNum, _ := strconv.Atoi(record[1])
+
+		if !chosenHouseholdIDs[householdID] {
+			continue
+		}
 
 		// Find the party or create a new one
 		if _, ok := parties[householdID]; !ok {
@@ -246,6 +257,7 @@ func loadDataFromInputsCSV(path string, choices []RLChoice) (map[string]*Party, 
 			encryptionRatio: ratio,
 		}
 	}
+	fmt.Fprintf(os.Stderr, "DEBUG: loadDataFromInputsCSV - Finished processing. Number of parties loaded: %d\n", len(parties))
 	return parties, nil
 }
 
@@ -443,7 +455,9 @@ func performHEEncryption(params ckks.Parameters, parties map[string]*Party, pk *
 	return encOutputs, encInputsSummation, encInputsNegative
 }
 
-func memberIdentificationAttack(parties map[string]*Party) []float64 {
+// These group of functions investigate if an attacker was able to gather unencrypted/plain-text water meter readings
+// would they be able to find out which household did it originate from within entire dataset.
+func runReidentificationAttack(parties map[string]*Party) []float64 {
 	var attackCount int
 	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
 	var std float64
@@ -454,9 +468,9 @@ func memberIdentificationAttack(parties map[string]*Party) []float64 {
 		partyIDs = append(partyIDs, id)
 	}
 
-	for attackCount = 0; attackCount < maxAttackLoop; attackCount++ {
-		var successNum = attackParties(parties, partyIDs)          // Integer result of one attack run.
-		successCounts = append(successCounts, float64(successNum)) // Stores the success count for this run.
+	for attackCount = 0; attackCount < maxReidentificationAttempts; attackCount++ {
+		var successNum = identifySourceHousehold(parties, partyIDs) // Integer result of one attack run.
+		successCounts = append(successCounts, float64(successNum))  // Stores the success count for this run.
 
 		// NOTE: These calculations are for internal stopping conditions, not for statistical purposes.
 		std, _, _ = calculateStandardDeviationAndMeanAndVariance(successCounts)
@@ -469,8 +483,8 @@ func memberIdentificationAttack(parties map[string]*Party) []float64 {
 	return successCounts
 }
 
-func attackParties(parties map[string]*Party, partyIDs []string) (attackSuccessNum int) {
-	attackSuccessNum = 0
+func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reidenitificationSuccessNum int) {
+	reidenitificationSuccessNum = 0
 
 	var valid bool
 	var randomPartyID string
@@ -482,23 +496,23 @@ func attackParties(parties map[string]*Party, partyIDs []string) (attackSuccessN
 		randomSectionIndex = getRandomSection(randomPartyID)
 
 		section, ok := parties[randomPartyID].sections[randomSectionIndex]
-		if !ok || len(section.readings) < atdSize {
+		if !ok || len(section.readings) < leakedPlaintextSize {
 			continue
 		}
 
-		offset = getRandom(len(section.readings) - atdSize + 1)
-		attackerDataBlock = section.readings[offset : offset+atdSize]
+		offset = getRandom(len(section.readings) - leakedPlaintextSize + 1)
+		attackerDataBlock = section.readings[offset : offset+leakedPlaintextSize]
 
 		if uniqueDataBlock(parties, attackerDataBlock, randomPartyID, randomSectionIndex, "sections") {
 			valid = true
 		}
 	}
 
-	matchedHouseholds := identifyParty(parties, attackerDataBlock)
+	matchedHouseholds := identifyParty(parties, attackerDataBlock, randomPartyID)
 	if len(matchedHouseholds) == 1 && matchedHouseholds[0] == randomPartyID {
-		attackSuccessNum++
+		reidenitificationSuccessNum++
 	}
-	return attackSuccessNum
+	return reidenitificationSuccessNum
 }
 
 // getRandomSection is a helper function that returns an unused random start block/section for the Party
@@ -544,12 +558,12 @@ func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string,
 		if inputType == "sections" {
 			// Only compare to the same section index.
 			section, ok := partyData.sections[sectionIndex]
-			if !ok || len(section.readings) < atdSize {
+			if !ok || len(section.readings) < leakedPlaintextSize {
 				continue
 			}
 			householdData := section.readings
-			for i := 0; i < len(householdData)-atdSize+1; i++ {
-				var target = householdData[i : i+atdSize]
+			for i := 0; i < len(householdData)-leakedPlaintextSize+1; i++ {
+				var target = householdData[i : i+leakedPlaintextSize]
 				if reflect.DeepEqual(target, arr) {
 					unique = false
 					usedRandomSectionsByParty[partyID] = append(usedRandomSectionsByParty[partyID], i)
@@ -560,11 +574,11 @@ func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string,
 			// Compare to all sections in the party.
 			for _, section := range partyData.sections {
 				readings := section.readings
-				if len(readings) < atdSize {
+				if len(readings) < leakedPlaintextSize {
 					continue
 				}
-				for i := 0; i < len(readings)-atdSize+1; i++ {
-					var target = readings[i : i+atdSize]
+				for i := 0; i < len(readings)-leakedPlaintextSize+1; i++ {
+					var target = readings[i : i+leakedPlaintextSize]
 					if reflect.DeepEqual(target, arr) {
 						unique = false
 						usedRandomSectionsByParty[partyID] = append(usedRandomSectionsByParty[partyID], i)
@@ -583,58 +597,36 @@ func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string,
 	return unique
 }
 
-func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64) []string {
+func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64, originalPartyID string) []string {
 	var matchedHouseholds []string
 
 	// Match threshold: # of elements that must match.
-	minMatchCount := math.Ceil(float64(atdSize) * float64(minPercentMatched) / 100)
+	minMatchCount := math.Ceil(float64(leakedPlaintextSize) * float64(reidentificationMatchThreshold) / 100)
 
 	for partyID, party := range parties {
+		//if partyID == originalPartyID {
+		//	continue
+		//}
 		for _, section := range party.sections {
-			encReadings := section.encryptedReadings
-			if len(encReadings) == 0 {
+			unencryptedReadings := section.unencryptedReadings
+			if len(unencryptedReadings) < len(attackerPlainTextBlock) {
 				continue
 			}
 
-			// Attacker encrypts their leaked plain-text block with the same encryption transformation used by the system.
-			simulatedEncryptedBlock := make([]float64, len(attackerPlainTextBlock))
-			copy(simulatedEncryptedBlock, attackerPlainTextBlock)
-
-			for leakedReadings := range simulatedEncryptedBlock {
-				simulatedEncryptedBlock[leakedReadings] *= (1.0 - section.encryptionRatio)
-			}
-
-			// Determine epsilon tolerance based on encryption ratio.
-			var precision float64
-			switch {
-			case section.encryptionRatio <= 0.3:
-				precision = 100
-			case section.encryptionRatio <= 0.7:
-				precision = 10
-			default:
-				precision = 1
-			}
-			for leakedReadings := range simulatedEncryptedBlock {
-				simulatedEncryptedBlock[leakedReadings] = math.Round(simulatedEncryptedBlock[leakedReadings]*precision) / precision
-			}
-			epsilon := 0.5 / precision
-			targetEncryptedBlock := section.encryptedReadings // The current encrypted section that the attacker is trying to match theirs to.
-
-			n := min(len(simulatedEncryptedBlock), len(targetEncryptedBlock))
-			if n == 0 {
-				continue
-			}
-			matchCount := 0
-
-			for k := 0; k < n; k++ {
-				if math.Abs(simulatedEncryptedBlock[k]-targetEncryptedBlock[k]) < epsilon {
-					matchCount++
+			// Attacker slides their block over the target's unencrypted readings to find a match.
+			for i := 0; i <= len(unencryptedReadings)-len(attackerPlainTextBlock); i++ {
+				targetWindow := unencryptedReadings[i : i+len(attackerPlainTextBlock)]
+				matchCount := 0
+				for k := 0; k < len(attackerPlainTextBlock); k++ {
+					if math.Abs(attackerPlainTextBlock[k]-targetWindow[k]) < 1e-9 {
+						matchCount++
+					}
 				}
-			}
 
-			if float64(matchCount) >= minMatchCount {
-				matchedHouseholds = append(matchedHouseholds, partyID)
-				goto NextParty // Found a match, stop checking other sections for this party.
+				if float64(matchCount) >= minMatchCount {
+					matchedHouseholds = append(matchedHouseholds, partyID)
+					goto NextParty // Found a match, stop checking other sections for this party.
+				}
 			}
 		}
 	NextParty:

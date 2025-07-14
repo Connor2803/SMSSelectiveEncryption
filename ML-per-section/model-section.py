@@ -22,8 +22,8 @@ class Welford:
     def __init__(self):
         # Where, M is the mean, S is the sum of square differences, V is the variance,
         # Z is the standard deviation, and K is the current number of data points.
-        self.asr_mean_M = 0
-        self.asr_duration_M = 0
+        self.reidentification_rate_M = 0
+        self.reidentification_duration_M = 0
         self.memory_consumption_M = 0
         self.summation_error_M = 0
         self.deviation_error_M = 0
@@ -32,8 +32,8 @@ class Welford:
         self.summation_operations_time_M = 0
         self.deviation_operations_time_M = 0
 
-        self.asr_mean_S = 0
-        self.asr_duration_S = 0
+        self.reidentification_rate_S = 0
+        self.reidentification_duration_S = 0
         self.memory_consumption_S = 0
         self.summation_error_S = 0
         self.deviation_error_S = 0
@@ -42,8 +42,8 @@ class Welford:
         self.summation_operations_time_S = 0
         self.deviation_operations_time_S = 0
 
-        self.asr_mean_V = 0
-        self.asr_duration_V = 0
+        self.reidentification_rate_V = 0
+        self.reidentification_duration_V = 0
         self.memory_consumption_V = 0
         self.summation_error_V = 0
         self.deviation_error_V = 0
@@ -52,8 +52,8 @@ class Welford:
         self.summation_operations_time_V = 0
         self.deviation_operations_time_V = 0
 
-        self.asr_mean_Z = 0
-        self.asr_duration_Z = 0
+        self.reidentification_rate_Z = 0
+        self.reidentification_duration_Z = 0
         self.memory_consumption_Z = 0
         self.summation_error_Z = 0
         self.deviation_error_Z = 0
@@ -64,14 +64,14 @@ class Welford:
 
         self.k = 0
 
-    def update(self, current_asr_mean, current_asr_duration, current_memory_consumption, current_summation_error,
+    def update(self, current_reidentification_rate, current_reidentification_duration, current_memory_consumption, current_summation_error,
                current_deviation_error, current_encryption_time, current_decryption_time,
                current_summation_operations_time,
                current_deviation_operations_time):
         self.k += 1
 
-        old_asr_mean_M = self.asr_mean_M
-        old_asr_duration_M = self.asr_duration_M
+        old_reidentification_rate_M = self.reidentification_rate_M
+        old_reidentification_duration_M = self.reidentification_duration_M
         old_memory_consumption_M = self.memory_consumption_M
         old_summation_error_M = self.summation_error_M
         old_deviation_error_M = self.deviation_error_M
@@ -80,8 +80,8 @@ class Welford:
         old_summation_operations_time_M = self.summation_operations_time_M
         old_deviation_operations_time_M = self.deviation_operations_time_M
 
-        self.asr_mean_M += (current_asr_mean - self.asr_mean_M) / self.k
-        self.asr_duration_M += (current_asr_duration - self.asr_duration_M) / self.k
+        self.reidentification_rate_M += (current_reidentification_rate - self.reidentification_rate_M) / self.k
+        self.reidentification_duration_M += (current_reidentification_duration - self.reidentification_duration_M) / self.k
         self.memory_consumption_M += (current_memory_consumption - self.memory_consumption_M) / self.k
         self.summation_error_M += (current_summation_error - self.summation_error_M) / self.k
         self.deviation_error_M += (current_deviation_error - self.deviation_error_M) / self.k
@@ -92,9 +92,9 @@ class Welford:
         self.deviation_operations_time_M += (
                                                     current_deviation_operations_time - self.deviation_operations_time_M) / self.k
 
-        self.asr_mean_S += (current_asr_mean - self.asr_mean_M) * (current_asr_mean - old_asr_mean_M)
-        self.asr_duration_S += (current_asr_duration - self.asr_duration_M) * (
-                current_asr_duration - old_asr_duration_M)
+        self.reidentification_rate_S += (current_reidentification_rate - self.reidentification_rate_M) * (current_reidentification_rate - old_reidentification_rate_M)
+        self.reidentification_duration_S += (current_reidentification_duration - self.reidentification_duration_M) * (
+                current_reidentification_duration - old_reidentification_duration_M)
         self.memory_consumption_S += (current_memory_consumption - self.memory_consumption_M) * (
                 current_memory_consumption - old_memory_consumption_M)
         self.summation_error_S += (current_summation_error - self.summation_error_M) * (
@@ -114,8 +114,8 @@ class Welford:
         if self.k < 2:
             return 0
 
-        self.asr_mean_V = self.asr_mean_S / (self.k - 1)
-        self.asr_duration_V = self.asr_duration_S / (self.k - 1)
+        self.reidentification_rate_V = self.reidentification_rate_S / (self.k - 1)
+        self.reidentification_duration_V = self.reidentification_duration_S / (self.k - 1)
         self.memory_consumption_V = self.memory_consumption_S / (self.k - 1)
         self.summation_error_V = self.summation_error_S / (self.k - 1)
         self.deviation_error_V = self.deviation_error_S / (self.k - 1)
@@ -124,11 +124,11 @@ class Welford:
         self.summation_operations_time_V = self.summation_operations_time_S / (self.k - 1)
         self.deviation_operations_time_V = self.deviation_operations_time_S / (self.k - 1)
 
-        return [self.asr_mean_V, self.asr_duration_V, self.memory_consumption_V, self.summation_error_V,
+        return [self.reidentification_rate_V, self.reidentification_duration_V, self.memory_consumption_V, self.summation_error_V,
                 self.deviation_error_V, self.encryption_time_V, self.decryption_time_V,
                 self.summation_operations_time_V, self.deviation_operations_time_V]
 
-    def get_standardised_values(self, current_asr_mean, current_asr_duration, current_memory_consumption,
+    def get_standardised_values(self, current_reidentification_rate, current_reidentification_duration, current_memory_consumption,
                                 current_summation_error,
                                 current_deviation_error, current_encryption_time, current_decryption_time,
                                 current_summation_operations_time, current_deviation_operations_time):
@@ -137,8 +137,8 @@ class Welford:
 
         std_devs = [math.sqrt(v) if v > 0 else 1e-8 for v in self.get_variance()]
 
-        self.asr_mean_Z = (current_asr_mean - self.asr_mean_M) / std_devs[0]
-        self.asr_duration_Z = (current_asr_duration - self.asr_duration_M) / std_devs[1]
+        self.reidentification_rate_Z = (current_reidentification_rate - self.reidentification_rate_M) / std_devs[0]
+        self.reidentification_duration_Z = (current_reidentification_duration - self.reidentification_duration_M) / std_devs[1]
         self.memory_consumption_Z = (current_memory_consumption - self.memory_consumption_M) / std_devs[2]
         self.summation_error_Z = (current_summation_error - self.summation_error_M) / std_devs[3]
         self.deviation_error_Z = (current_deviation_error - self.deviation_error_M) / std_devs[4]
@@ -149,7 +149,7 @@ class Welford:
         self.deviation_operations_time_Z = (current_deviation_operations_time - self.deviation_operations_time_M) / \
                                            std_devs[8]
 
-        return [self.asr_mean_Z, self.asr_duration_Z, self.memory_consumption_Z, self.summation_error_Z,
+        return [self.reidentification_rate_Z, self.reidentification_duration_Z, self.memory_consumption_Z, self.summation_error_Z,
                 self.deviation_error_Z, self.encryption_time_Z, self.decryption_time_Z,
                 self.summation_operations_time_Z, self.deviation_operations_time_Z]
 
@@ -344,8 +344,8 @@ class EncryptionSelectorEnv(gym.Env):
         if self._go_metrics is None or self._all_party_metrics is None:
             print("DEBUG: _go_metrics or _all_party_metrics is None, returning zeros.")
             return {
-                "global_asr_mean": 0,
-                "global_asr_duration": 0,
+                "global_reidentification_rate": 0,
+                "global_reidentification_duration": 0,
                 "global_memory_consumption": 0,
                 "global_summation_error": 0,
                 "global_deviation_error": 0,
@@ -355,8 +355,8 @@ class EncryptionSelectorEnv(gym.Env):
                 "global_deviation_operations_time": 0,
             }
 
-        global_asr_mean = self._go_metrics["globalASRMean"]
-        global_asr_duration = self._go_metrics["globalASRDurationNS"]
+        global_reidentification_rate = self._go_metrics["globalReidentificationRate"]
+        global_reidentification_duration = self._go_metrics["globalReidentificationDurationNS"]
         global_memory_consumption = self._go_metrics["globalMemoryConsumptionMiB"]
 
         global_summation_error = sum(p["summationError"] for p in self._all_party_metrics.values())
@@ -367,8 +367,8 @@ class EncryptionSelectorEnv(gym.Env):
         global_deviation_operations_time = sum(p["deviationOpsTimeNS"] for p in self._all_party_metrics.values())
 
         return {
-            "global_asr_mean": global_asr_mean,
-            "global_asr_duration": global_asr_duration,
+            "global_reidentification_rate": global_reidentification_rate,
+            "global_reidentification_duration": global_reidentification_duration,
             "global_memory_consumption": global_memory_consumption,
             "global_summation_error": global_summation_error,
             "global_deviation_error": global_deviation_error,
@@ -387,7 +387,7 @@ class EncryptionSelectorEnv(gym.Env):
         current_household_id = info["household_id"]
         current_section_number = info["section_number"]
 
-        print(f"DEBUG: Entering step method. Current household ID: {current_household_id}, Current household index: {self._current_household_idx}, section index: {self._current_section_idx_in_household}")
+        # print(f"DEBUG: Entering step method. Current household ID: {current_household_id}, Current household index: {self._current_household_idx}, section index: {self._current_section_idx_in_household}")
 
         raw_utility_readings_array = info["all_utility_readings_in_section"]
         section_raw_entropy = self._calculate_entropy(raw_utility_readings_array)
@@ -428,7 +428,8 @@ class EncryptionSelectorEnv(gym.Env):
                 terminated = True  # All households in this phase are processed.
                 self._household_ids_processed_in_phase.extend(self._active_households)
 
-        print(f"DEBUG: 'terminated' flag value before conditional block: {terminated}")
+        # print(f"DEBUG: 'terminated' flag value before conditional block: {terminated}")
+
         if terminated:
             try:
                 # 1. Prepare data for Go program
@@ -444,8 +445,15 @@ class EncryptionSelectorEnv(gym.Env):
                     for k, v in self._chosen_encryption_ratios.items()
                 ]
                 data_for_go_filepath = "RL_choices.json"
+
+                print(f"\nDEBUG: Data for Go program (first entry, total {len(data_for_go)}):")
+                for i, entry in enumerate(data_for_go[:1]):
+                    print(f"  {i}: {entry}")
+                print("-" * 50)
+
                 with open(data_for_go_filepath, "w") as f:
                     json.dump(data_for_go, f)
+                print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
 
                 # 2. Run the Go program as a subprocess.
                 print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
@@ -466,8 +474,8 @@ class EncryptionSelectorEnv(gym.Env):
                 print(f"DEBUG: self._go_metrics after parsing: {self._go_metrics}")
                 print(f"DEBUG: self._all_party_metrics after parsing: {self._all_party_metrics}")
 
-                global_asr_mean = self._go_metrics["globalASRMean"]
-                global_asr_duration = self._go_metrics["globalASRDurationNS"]
+                global_reidentification_rate = self._go_metrics["globalReidentificationRate"]
+                global_reidentification_duration = self._go_metrics["globalReidentificationDurationNS"]
                 global_memory_consumption = self._go_metrics["globalMemoryConsumptionMiB"]
 
                 global_summation_error = sum(p["summationError"] for p in self._all_party_metrics.values())
@@ -479,12 +487,12 @@ class EncryptionSelectorEnv(gym.Env):
                 global_deviation_operations_time = sum(
                     p["deviationOpsTimeNS"] for p in self._all_party_metrics.values())
 
-                self._welford.update(global_asr_mean, global_asr_duration, global_memory_consumption,
+                self._welford.update(global_reidentification_rate, global_reidentification_duration, global_memory_consumption,
                                      global_summation_error, global_deviation_error, global_encryption_time,
                                      global_decryption_time, global_summation_operations_time,
                                      global_deviation_operations_time)
 
-                z_scores = self._welford.get_standardised_values(global_asr_mean, global_asr_duration,
+                z_scores = self._welford.get_standardised_values(global_reidentification_rate, global_reidentification_duration,
                                                                  global_memory_consumption,
                                                                  global_summation_error, global_deviation_error,
                                                                  global_encryption_time,
@@ -492,10 +500,10 @@ class EncryptionSelectorEnv(gym.Env):
                                                                  global_summation_operations_time,
                                                                  global_deviation_operations_time)
 
-                z_asr_mean, z_asr_duration, z_memory, z_sum_error, z_dev_error, z_enc_time, z_dec_time, z_sum_ops_time, z_dev_ops_time = z_scores
+                z_reidentification_rate, z_reidentification_duration, z_memory, z_sum_error, z_dev_error, z_enc_time, z_dec_time, z_sum_ops_time, z_dev_ops_time = z_scores
 
-                # Privacy cost = ASR
-                privacy_cost = z_asr_mean - (z_asr_duration + z_dec_time)
+                # Privacy cost = reidentification success
+                privacy_cost = z_reidentification_rate - (z_reidentification_duration + z_dec_time)
 
                 # Utility cost = errors + computation time
                 utility_cost = z_sum_error + z_dev_error + z_enc_time + z_sum_ops_time + z_dev_ops_time + z_memory
@@ -505,8 +513,8 @@ class EncryptionSelectorEnv(gym.Env):
 
                 # Store global metrics in info dictionary for the callback
                 info["global_metrics"] = {
-                    "global_asr_mean": global_asr_mean,
-                    "global_asr_duration": global_asr_duration,
+                    "global_reidentification_rate": global_reidentification_rate,
+                    "global_reidentification_duration": global_reidentification_duration,
                     "global_memory_consumption": global_memory_consumption,
                     "global_summation_error": global_summation_error,
                     "global_deviation_error": global_deviation_error,
@@ -622,8 +630,8 @@ class SectionLoggingCallback(BaseCallback):
 
         log_headers_global = [
             "Episode",
-            "ASR Mean",
-            "ASR Duration",
+            "Reidentification Rate",
+            "Reidentification Duration (NS)",
             "Memory Consumption (MiB)",
             "Summation Error",
             "Deviation Error",
@@ -675,8 +683,8 @@ class SectionLoggingCallback(BaseCallback):
             if global_info:
                 self.writer_global.writerow([
                     self.episode_num,
-                    global_info["global_asr_mean"],
-                    global_info["global_asr_duration"],
+                    global_info["global_reidentification_rate"],
+                    global_info["global_reidentification_duration"],
                     global_info["global_memory_consumption"],
                     global_info["global_summation_error"],
                     global_info["global_deviation_error"],

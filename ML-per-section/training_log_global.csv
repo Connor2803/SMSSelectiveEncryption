@@ -1,2 +1,2 @@
-Episode,ASR Mean,ASR Duration,Memory Consumption (MiB),Summation Error,Deviation Error,Encryption Time (NS),Decryption Time (NS),Summation Operations Time (NS),Deviation Operations Time (NS)
-1,0,5741804,34,3379492.461538462,41842.81860029114,224459400,3000600,36706300,82553000
+Episode,Reidentification Rate,Reidentification Duration (NS),Memory Consumption (MiB),Summation Error,Deviation Error,Encryption Time (NS),Decryption Time (NS),Summation Operations Time (NS),Deviation Operations Time (NS)
+1,0.00016501650165016502,7337975,77,4272967.692307692,41842.81862695636,230367900,4009500,35852600,80901600
