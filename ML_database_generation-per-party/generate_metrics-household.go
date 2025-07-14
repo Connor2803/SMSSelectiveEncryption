@@ -985,8 +985,6 @@ func identifyParty(P []*Party, attackerRawBlock []float64, originalPartyIdx int,
 				}
 
 				if isBlockMatch {
-					// If uniqueATD == 0, check for uniqueness of the *candidateEncryptedBlock* among *other parties' encrypted data*
-					// To check if this specific block that matched is "unique enough" to count as a successful identification.
 					if uniqueATD == 0 {
 						if uniqueDataBlocks(P, [][]float64{candidateEncryptedBlock}, partyIdx, startOffset, min_length, epsilon) {
 							matched_households = append(matched_households, partyIdx)
@@ -1034,7 +1032,7 @@ func uniqueDataBlocks(P []*Party, pos_matches [][]float64, party int, index int,
 
 	for pn, po := range P {
 		if pn == party {
-			continue // Skip the current Party, as we're checking uniqueness against *other* parties
+			continue
 		}
 		for _, household_section := range po.encryptedInput { // Iterate through each section of the other Party's encrypted input
 			for i := 0; i <= len(household_section)-min_length; i++ {
@@ -1042,8 +1040,8 @@ func uniqueDataBlocks(P []*Party, pos_matches [][]float64, party int, index int,
 
 				for _, pos_match := range pos_matches {
 					if compareFloatSlices(target, pos_match, epsilon) {
-						unique = false // Found a duplicate in another Party, so it's not unique.
-						break          // Exit inner loop (no need to check other pos_matches)
+						unique = false
+						break // Exit inner loop (no need to check other pos_matches)
 					}
 				}
 				if !unique {

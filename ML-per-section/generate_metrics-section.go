@@ -73,7 +73,7 @@ type Section struct {
 const MAXPARTYROWS = 10240                         // Maximum number of water meter readings to be included in the experiment from the original dataset.
 const MAXSECTIONNUMBER = 10                        /// Maximum number of sections to be included in a household (each section will contain MAXPARTYROWS / SECTIONSIZE reading entries).
 const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
-var maxReidentificationAttempts = 1000             // Default value for number of loops for runReidentificationAttack.
+var maxReidentificationAttempts = 10               // Default value for number of loops for runReidentificationAttack.
 var leakedPlaintextSize = 12                       // Number of water meter readings included in the leaked attacker data
 var reidentificationMatchThreshold = 90            // Default value for minimum percentage match for identification.
 var usedRandomSectionsByParty = map[string][]int{} // 2D slice to hold which household sections have been used as the attacker block.
@@ -469,6 +469,7 @@ func runReidentificationAttack(parties map[string]*Party) []float64 {
 	}
 
 	for attackCount = 0; attackCount < maxReidentificationAttempts; attackCount++ {
+		fmt.Fprintf(os.Stderr, "DEBUG: runReidentificationAttack - Attempt loop %d/%d\n", attackCount+1, maxReidentificationAttempts)
 		var successNum = identifySourceHousehold(parties, partyIDs) // Integer result of one attack run.
 		successCounts = append(successCounts, float64(successNum))  // Stores the success count for this run.
 
@@ -476,6 +477,7 @@ func runReidentificationAttack(parties map[string]*Party) []float64 {
 		std, _, _ = calculateStandardDeviationAndMeanAndVariance(successCounts)
 		standardError = std / math.Sqrt(float64(len(successCounts)))
 		if standardError <= 0.01 && attackCount >= 100 { // Stop attack earlier if results stabilise.
+			fmt.Fprintf(os.Stderr, "DEBUG: runReidentificationAttack - Stopping early due to stable results (standard error <= 0.01) after %d attacks.\n", attackCount+1)
 			attackCount++
 			break
 		}
@@ -490,27 +492,48 @@ func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reid
 	var randomPartyID string
 	var randomSectionIndex, offset int
 	var attackerDataBlock []float64
+	iteration := 0
 
 	for !valid {
+		iteration++
+		if iteration > 10000 {
+			fmt.Fprintln(os.Stderr, "WARNING: identifySourceHousehold - Could not find a unique data block after 10000 iterations. Skipping this attack run.")
+			return 0
+		}
 		randomPartyID = partyIDs[rand.Intn(len(partyIDs))]
 		randomSectionIndex = getRandomSection(randomPartyID)
 
 		section, ok := parties[randomPartyID].sections[randomSectionIndex]
 		if !ok || len(section.readings) < leakedPlaintextSize {
+			fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - Skipping party %s section %d (not found or too small).\n", randomPartyID, randomSectionIndex)
 			continue
 		}
 
 		offset = getRandom(len(section.readings) - leakedPlaintextSize + 1)
 		attackerDataBlock = section.readings[offset : offset+leakedPlaintextSize]
 
+		fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - Checking uniqueness for party %s, section %d, offset %d...\n", randomPartyID, randomSectionIndex, offset)
 		if uniqueDataBlock(parties, attackerDataBlock, randomPartyID, randomSectionIndex, "sections") {
+			fmt.Fprintln(os.Stderr, "DEBUG: identifySourceHousehold - Found unique data block.")
 			valid = true
+		} else {
+			fmt.Fprintln(os.Stderr, "DEBUG: identifySourceHousehold - Data block not unique, trying again.")
+
 		}
 	}
 
+	fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - Calling identifyParty for originalPartyID: %s\n", randomPartyID)
 	matchedHouseholds := identifyParty(parties, attackerDataBlock, randomPartyID)
+	fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - identifyParty returned %d matches.\n", len(matchedHouseholds))
+
 	if len(matchedHouseholds) == 1 && matchedHouseholds[0] == randomPartyID {
 		reidenitificationSuccessNum++
+		fmt.Fprintln(os.Stderr, "DEBUG: identifySourceHousehold - Attack successful: Original party uniquely identified.")
+	} else {
+		fmt.Fprintln(os.Stderr, "DEBUG: identifySourceHousehold - Attack failed: Original party not uniquely identified.")
+		if len(matchedHouseholds) > 1 {
+			fmt.Fprintf(os.Stderr, "DEBUG: Matched households: %v\n", matchedHouseholds)
+		}
 	}
 	return reidenitificationSuccessNum
 }
@@ -550,6 +573,7 @@ func contains(partyID string, randomStart int) bool {
 // uniqueDataBlock is a helper function that checks if the data block is unique in the dataset.
 func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string, sectionIndex int, inputType string) bool {
 	var unique bool = true
+	comparisonCount := 0
 
 	for partyID, partyData := range parties {
 		if partyID == partyName {
@@ -563,6 +587,7 @@ func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string,
 			}
 			householdData := section.readings
 			for i := 0; i < len(householdData)-leakedPlaintextSize+1; i++ {
+				comparisonCount++
 				var target = householdData[i : i+leakedPlaintextSize]
 				if reflect.DeepEqual(target, arr) {
 					unique = false
@@ -594,14 +619,17 @@ func uniqueDataBlock(parties map[string]*Party, arr []float64, partyName string,
 			break
 		}
 	}
+	fmt.Fprintf(os.Stderr, "DEBUG: uniqueDataBlock - Completed %d comparisons. Unique: %t\n", comparisonCount, unique)
 	return unique
 }
 
 func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64, originalPartyID string) []string {
 	var matchedHouseholds []string
+	matchAttempts := 0
 
 	// Match threshold: # of elements that must match.
 	minMatchCount := math.Ceil(float64(leakedPlaintextSize) * float64(reidentificationMatchThreshold) / 100)
+	fmt.Fprintf(os.Stderr, "DEBUG: identifyParty - minMatchCount: %.0f\n", minMatchCount)
 
 	for partyID, party := range parties {
 		//if partyID == originalPartyID {
@@ -615,6 +643,7 @@ func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64, 
 
 			// Attacker slides their block over the target's unencrypted readings to find a match.
 			for i := 0; i <= len(unencryptedReadings)-len(attackerPlainTextBlock); i++ {
+				matchAttempts++
 				targetWindow := unencryptedReadings[i : i+len(attackerPlainTextBlock)]
 				matchCount := 0
 				for k := 0; k < len(attackerPlainTextBlock); k++ {
@@ -625,12 +654,15 @@ func identifyParty(parties map[string]*Party, attackerPlainTextBlock []float64, 
 
 				if float64(matchCount) >= minMatchCount {
 					matchedHouseholds = append(matchedHouseholds, partyID)
+					fmt.Fprintf(os.Stderr, "DEBUG: identifyParty - Found match for party %s in section (matchCount: %d)\n", partyID, matchCount)
 					goto NextParty // Found a match, stop checking other sections for this party.
 				}
 			}
 		}
 	NextParty:
 	}
+
+	fmt.Fprintf(os.Stderr, "DEBUG: identifyParty - Total match attempts: %d\n", matchAttempts)
 
 	// Deduplicate party matches.
 	unique := make(map[string]bool)
