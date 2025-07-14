@@ -3,7 +3,7 @@
 import csv
 import json
 import math
-import random
+import os
 import subprocess
 import time
 from collections import Counter
@@ -166,16 +166,21 @@ class EncryptionSelectorEnv(gym.Env):
         self._per_party_df = pd.read_csv("../ML_database_generation-per-party/ML_metrics_WATER.csv", header=0)
         self._per_party_HE_df = pd.read_csv("../ML_database_generation-per-party/ML_party-metrics_WATER.csv", header=0)
 
+        # Retrieve the unique household IDs from the Water dataset.
+        unique_household_IDs = self._df["Household ID"].unique()
+
         # Convert string representation of list to actual list of floats.
         self._df["All Utility Readings in Section"] = self._df["All Utility Readings in Section"].apply(
             lambda x: json.loads(x))
 
         # Split the dataset into training, validation, and testing household IDs based on the household IDs.
-        training_households_array, validation_and_testing_households_array = train_test_split(self._df["Household ID"],
-                                                                                  test_size=0.25,
-                                                                                  random_state=42, shuffle=True)
-        validation_households_array, testing_households_array = train_test_split(validation_and_testing_households_array, test_size=0.5,
-                                                                     random_state=42, shuffle=True)
+        training_households_array, validation_and_testing_households_array = train_test_split(unique_household_IDs,
+                                                                                              test_size=0.25,
+                                                                                              random_state=42,
+                                                                                              shuffle=True)
+        validation_households_array, testing_households_array = train_test_split(
+            validation_and_testing_households_array, test_size=0.5,
+            random_state=42, shuffle=True)
 
         training_households = training_households_array.tolist()
         validation_households = validation_households_array.tolist()
@@ -206,16 +211,25 @@ class EncryptionSelectorEnv(gym.Env):
         else:
             raise ValueError("dataset_type must be 'train', 'validation', or 'test'")
 
+        # Internal state to keep track of current household and section.
         self._current_household_idx = 0
+        self._current_section_idx_in_household = 0
+        self._current_household_data = None
+        self._household_ids_processed_in_phase = []
+
+        print(f"DEBUG: __init__ - Number of active households: {len(self._active_households)}")
 
         self._chosen_encryption_ratios = {}
+        self._all_party_metrics = None
+        self._go_metrics = None
 
         # Define observation space boundaries.
         max_section_level_water_usage = self._df["Per Section Utility Usage"].max()
         min_section_level_water_usage = self._df["Per Section Utility Usage"].min()
 
         # Calculate max and min pre-encryption section-level entropy.
-        all_readings_flat = [reading for section_list in self._df["All Utility Readings in Section"] for reading in section_list]  # shape: (819200) > 80 households x 10 sections x 1024 readings.
+        all_readings_flat = [reading for section_list in self._df["All Utility Readings in Section"] for reading in
+                             section_list]  # shape: (819200) > 80 households x 10 sections x 1024 readings.
         counts = Counter(all_readings_flat)
         total = len(all_readings_flat)
         assert len(self._df["All Utility Readings in Section"]) == 800
@@ -246,12 +260,6 @@ class EncryptionSelectorEnv(gym.Env):
         # Actions are discrete integers that describe the action to be taken by the agent.
         # We have 9 discrete actions, corresponding to the 9 encryption ratios.
         self.action_space = gym.spaces.Discrete(9)
-
-        # Internal state to keep track of current household and section.
-        self._current_household_idx = 0
-        self._current_section_idx_in_household = 0
-        self._current_household_data = None
-        self._household_ids_processed_in_phase = []
 
     def _calculate_entropy(self, data):
         if not data:
@@ -316,7 +324,8 @@ class EncryptionSelectorEnv(gym.Env):
             "section_raw_entropy": np.array([section_raw_entropy], dtype=np.float64)
         }
 
-    def _get_info(self):
+    # Returns state information about the current section and current household that the model is selecting an encryption ratio for.
+    def _get_intermediate_info(self):
         current_household_id = self._active_households[self._current_household_idx]
         section_data_for_household = self._df[
             self._df["Household ID"] == current_household_id].sort_values(by="Section Number")
@@ -327,15 +336,58 @@ class EncryptionSelectorEnv(gym.Env):
             "date_range": current_section_row["Date Range"],
             "per_section_utility_usage": current_section_row["Per Section Utility Usage"],
             "all_utility_readings_in_section": current_section_row["All Utility Readings in Section"]
+
+        }
+
+    # Return the state information of all households and sections after the model has selected an encryption ratio for.
+    def _get_terminated_global_info(self):
+        if self._go_metrics is None or self._all_party_metrics is None:
+            print("DEBUG: _go_metrics or _all_party_metrics is None, returning zeros.")
+            return {
+                "global_asr_mean": 0,
+                "global_asr_duration": 0,
+                "global_memory_consumption": 0,
+                "global_summation_error": 0,
+                "global_deviation_error": 0,
+                "global_encryption_time": 0,
+                "global_decryption_time": 0,
+                "global_summation_operations_time": 0,
+                "global_deviation_operations_time": 0,
+            }
+
+        global_asr_mean = self._go_metrics["globalASRMean"]
+        global_asr_duration = self._go_metrics["globalASRDurationNS"]
+        global_memory_consumption = self._go_metrics["globalMemoryConsumptionMiB"]
+
+        global_summation_error = sum(p["summationError"] for p in self._all_party_metrics.values())
+        global_deviation_error = sum(p["deviationError"] for p in self._all_party_metrics.values())
+        global_encryption_time = sum(p["encryptionTimeNS"] for p in self._all_party_metrics.values())
+        global_decryption_time = sum(p["decryptionTimeNS"] for p in self._all_party_metrics.values())
+        global_summation_operations_time = sum(p["summationOpsTimeNS"] for p in self._all_party_metrics.values())
+        global_deviation_operations_time = sum(p["deviationOpsTimeNS"] for p in self._all_party_metrics.values())
+
+        return {
+            "global_asr_mean": global_asr_mean,
+            "global_asr_duration": global_asr_duration,
+            "global_memory_consumption": global_memory_consumption,
+            "global_summation_error": global_summation_error,
+            "global_deviation_error": global_deviation_error,
+            "global_encryption_time": global_encryption_time,
+            "global_decryption_time": global_decryption_time,
+            "global_summation_operations_time": global_summation_operations_time,
+            "global_deviation_operations_time": global_deviation_operations_time,
         }
 
     def step(self, action):
+
         # Map the action to the encryption ratio chosen by the agent.
         selected_encryption_ratio = self._encryption_ratios[action]
 
-        info = self._get_info()
+        info = self._get_intermediate_info()
         current_household_id = info["household_id"]
         current_section_number = info["section_number"]
+
+        print(f"DEBUG: Entering step method. Current household ID: {current_household_id}, Current household index: {self._current_household_idx}, section index: {self._current_section_idx_in_household}")
 
         raw_utility_readings_array = info["all_utility_readings_in_section"]
         section_raw_entropy = self._calculate_entropy(raw_utility_readings_array)
@@ -360,6 +412,13 @@ class EncryptionSelectorEnv(gym.Env):
         terminated = False
         truncated = False
 
+        if self._current_section_idx_in_household == 0 and self._current_household_idx > 0:
+            next_household_id = self._active_households[self._current_household_idx]
+            self._current_household_data = self._df[
+                self._df["Household ID"] == next_household_id].sort_values(by="Section Number")
+            print(f"DEBUG: Step - Loaded data for new household: {next_household_id}")
+            print(f"DEBUG: Step - Number of sections in new household data: {len(self._current_household_data)}")
+
         # Check if all sections in current household are processed.
         if self._current_section_idx_in_household >= len(self._current_household_data):
             self._current_household_idx += 1  # Move to the next household.
@@ -368,12 +427,8 @@ class EncryptionSelectorEnv(gym.Env):
             if self._current_household_idx >= len(self._active_households):
                 terminated = True  # All households in this phase are processed.
                 self._household_ids_processed_in_phase.extend(self._active_households)
-            else:
-                # Load data for the next household.
-                next_household_id = self._active_households[self._current_household_idx]
-                self._current_household_data = self._df[
-                    self._df["Household ID"] == next_household_id].sort_values(by="Section Number")
 
+        print(f"DEBUG: 'terminated' flag value before conditional block: {terminated}")
         if terminated:
             try:
                 # 1. Prepare data for Go program
@@ -393,7 +448,7 @@ class EncryptionSelectorEnv(gym.Env):
                     json.dump(data_for_go, f)
 
                 # 2. Run the Go program as a subprocess.
-                print("\nEpisode finished. Calling Go program to calculate reward metrics...")
+                print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
                 go_result = subprocess.run(
                     ["./generate_metrics", data_for_go_filepath],
                     capture_output=True,
@@ -401,20 +456,28 @@ class EncryptionSelectorEnv(gym.Env):
                     check=True
                 )
 
+                print(f"Go Program stdout: {go_result.stdout}")
+                print(f"Go Program stderr: {go_result.stderr}")
+
                 # 3. Parse the metrics from the Go stdout
-                go_metrics = json.loads(go_result.stdout)
-                all_party_metrics = go_metrics["allPartyMetrics"]
+                self._go_metrics = json.loads(go_result.stdout)
+                self._all_party_metrics = self._go_metrics["allPartyMetrics"]
 
-                global_asr_mean = go_metrics["GlobalASRMean"]
-                global_asr_duration = go_metrics["GlobalASRDurationNS"]
-                global_memory_consumption = go_metrics["GlobalMemoryConsumption"]
+                print(f"DEBUG: self._go_metrics after parsing: {self._go_metrics}")
+                print(f"DEBUG: self._all_party_metrics after parsing: {self._all_party_metrics}")
 
-                global_summation_error = sum(p["summationError"] for p in all_party_metrics.values())
-                global_deviation_error = sum(p["deviationError"] for p in all_party_metrics.values())
-                global_encryption_time = sum(p["encryptionTimeNS"] for p in all_party_metrics.values())
-                global_decryption_time = sum(p["decryptionTimeNS"] for p in all_party_metrics.values())
-                global_summation_operations_time = sum(p["summationOpsTimeNS"] for p in all_party_metrics.values())
-                global_deviation_operations_time = sum(p["deviationOpsTimeNS"] for p in all_party_metrics.values())
+                global_asr_mean = self._go_metrics["globalASRMean"]
+                global_asr_duration = self._go_metrics["globalASRDurationNS"]
+                global_memory_consumption = self._go_metrics["globalMemoryConsumptionMiB"]
+
+                global_summation_error = sum(p["summationError"] for p in self._all_party_metrics.values())
+                global_deviation_error = sum(p["deviationError"] for p in self._all_party_metrics.values())
+                global_encryption_time = sum(p["encryptionTimeNS"] for p in self._all_party_metrics.values())
+                global_decryption_time = sum(p["decryptionTimeNS"] for p in self._all_party_metrics.values())
+                global_summation_operations_time = sum(
+                    p["summationOpsTimeNS"] for p in self._all_party_metrics.values())
+                global_deviation_operations_time = sum(
+                    p["deviationOpsTimeNS"] for p in self._all_party_metrics.values())
 
                 self._welford.update(global_asr_mean, global_asr_duration, global_memory_consumption,
                                      global_summation_error, global_deviation_error, global_encryption_time,
@@ -422,12 +485,12 @@ class EncryptionSelectorEnv(gym.Env):
                                      global_deviation_operations_time)
 
                 z_scores = self._welford.get_standardised_values(global_asr_mean, global_asr_duration,
-                                                                    global_memory_consumption,
-                                                                    global_summation_error, global_deviation_error,
-                                                                    global_encryption_time,
-                                                                    global_decryption_time,
-                                                                    global_summation_operations_time,
-                                                                    global_deviation_operations_time)
+                                                                 global_memory_consumption,
+                                                                 global_summation_error, global_deviation_error,
+                                                                 global_encryption_time,
+                                                                 global_decryption_time,
+                                                                 global_summation_operations_time,
+                                                                 global_deviation_operations_time)
 
                 z_asr_mean, z_asr_duration, z_memory, z_sum_error, z_dev_error, z_enc_time, z_dec_time, z_sum_ops_time, z_dev_ops_time = z_scores
 
@@ -440,38 +503,73 @@ class EncryptionSelectorEnv(gym.Env):
                 # 4. Calculate the final reward.
                 reward = intermediate_reward - privacy_cost - utility_cost
 
+                # Store global metrics in info dictionary for the callback
+                info["global_metrics"] = {
+                    "global_asr_mean": global_asr_mean,
+                    "global_asr_duration": global_asr_duration,
+                    "global_memory_consumption": global_memory_consumption,
+                    "global_summation_error": global_summation_error,
+                    "global_deviation_error": global_deviation_error,
+                    "global_encryption_time": global_encryption_time,
+                    "global_decryption_time": global_decryption_time,
+                    "global_summation_operations_time": global_summation_operations_time,
+                    "global_deviation_operations_time": global_deviation_operations_time,
+                }
+
             except subprocess.CalledProcessError as e:
-                print(f"Error executing Go program: {e}")
+                print(f"ERROR: Go program failed with CalledProcessError: {e}")
                 print(f"Stderr: {e.stderr}")
-                intermediate_reward -= 100
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                print(f"Error processing Go program output: {e}")
-                intermediate_reward -= 100
+                info["global_metrics"] = self._get_terminated_global_info()
+                self._go_metrics = None
+                self._all_party_metrics = None
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Failed to decode JSON from Go program: {e}")
+                info["global_metrics"] = self._get_terminated_global_info()
+                self._go_metrics = None
+                self._all_party_metrics = None
+            except FileNotFoundError:
+                print(
+                    "ERROR: Go program 'generate_metrics' not found. Make sure it's compiled and in the correct path.")
+                info["global_metrics"] = self._get_terminated_global_info()
+                self._go_metrics = None
+                self._all_party_metrics = None
+            except Exception as e:
+                print(f"ERROR: An unexpected error occurred in step method: {e}")
+                info["global_metrics"] = self._get_terminated_global_info()
+                self._go_metrics = None
+                self._all_party_metrics = None
 
         if not terminated:
             observation = self._get_observation()
         else:
             # StableBaselines3 expects an observation even if terminated.
             observation = self.observation_space.sample()
+            if "global_metrics" not in info:
+                info["global_metrics"] = self._get_terminated_global_info()
 
         return observation, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        print("DEBUG: Environment reset called.")
 
-        if self._active_households and self._current_household_idx >= len(self._active_households):
-            self._current_household_idx = 0
-
+        self._current_household_idx = 0
         self._current_section_idx_in_household = 0
         self._household_ids_processed_in_phase = []
         self._chosen_encryption_ratios = {}
+        self._go_metrics = None
+        self._all_party_metrics = None
 
         current_household_id = self._active_households[self._current_household_idx]
         self._current_household_data = self._df[
             self._df["Household ID"] == current_household_id].sort_values(by="Section Number")
 
+        print(f"DEBUG: Reset - Loaded data for household: {current_household_id}")
+        print(f"DEBUG: Reset - Number of sections in current household data: {len(self._current_household_data)}")
+        print(f"DEBUG: Reset - Total active households: {len(self._active_households)}")
+
         observation = self._get_observation()
-        info = self._get_info()
+        info = self._get_intermediate_info()
 
         return observation, info
 
@@ -496,18 +594,25 @@ class SectionLoggingCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, log_path: str, verbose: int = 0):
+    def __init__(self, log_path_section: str, log_path_global: str, verbose: int = 0):
         super().__init__(verbose)
-        self.log_path = log_path
-        self.log_file = None
-        self.writer = None
+
+        self.log_path_section = log_path_section
+        self.log_file_section = None
+        self.writer_section = None
+
+        self.log_path_global = log_path_global
+        self.log_file_global = None
+        self.writer_global = None
+
+        self.episode_num = 0
 
     def _on_training_start(self) -> None:
         """
                This method is called before the first rollout starts.
         """
 
-        log_headers = [
+        log_headers_section = [
             "Step",
             "Household ID",
             "Section Number",
@@ -515,9 +620,30 @@ class SectionLoggingCallback(BaseCallback):
             "Intermediate Reward"
         ]
 
-        self.log_file = open(self.log_path, 'w', newline='')
-        self.writer = csv.writer(self.log_file)
-        self.writer.writerow(log_headers)
+        log_headers_global = [
+            "Episode",
+            "ASR Mean",
+            "ASR Duration",
+            "Memory Consumption (MiB)",
+            "Summation Error",
+            "Deviation Error",
+            "Encryption Time (NS)",
+            "Decryption Time (NS)",
+            "Summation Operations Time (NS)",
+            "Deviation Operations Time (NS)",
+        ]
+        try:
+            self.log_file_section = open(self.log_path_section, 'w', newline='')
+            self.writer_section = csv.writer(self.log_file_section)
+            self.writer_section.writerow(log_headers_section)
+
+            self.log_file_global = open(self.log_path_global, 'w', newline='')
+            self.writer_global = csv.writer(self.log_file_global)
+            self.writer_global.writerow(log_headers_global)
+
+        except Exception as e:
+            print(f"ERROR: Failed to open log file or initialize CSV writer: {e}")
+            raise
 
     def _on_step(self) -> bool:
         """
@@ -535,13 +661,32 @@ class SectionLoggingCallback(BaseCallback):
                 chosen_ratio_info = self.training_env.get_attr('_chosen_encryption_ratios')[0].get(
                     (info['household_id'], info['section_number']))
                 if chosen_ratio_info:
-                    self.writer.writerow([
+                    self.writer_section.writerow([
                         self.n_calls,
                         info.get('household_id'),
                         info.get('section_number'),
                         chosen_ratio_info.get('ratio'),
-                        self.locals['rewards'][0],
+                        self.locals['rewards'][0],  # Intermediate reward, i.e., remaining entropy.
                     ])
+
+        if self.locals['dones'][0]:  # The episode has just finished.
+            self.episode_num += 1
+            global_info = self.locals['infos'][0].get('global_metrics', self.training_env.get_attr('_get_terminated_global_info')[0]())
+            if global_info:
+                self.writer_global.writerow([
+                    self.episode_num,
+                    global_info["global_asr_mean"],
+                    global_info["global_asr_duration"],
+                    global_info["global_memory_consumption"],
+                    global_info["global_summation_error"],
+                    global_info["global_deviation_error"],
+                    global_info["global_encryption_time"],
+                    global_info["global_decryption_time"],
+                    global_info["global_summation_operations_time"],
+                    global_info["global_deviation_operations_time"],
+                ])
+            else:
+                print("WARNING: Global metrics not found in info or from _get_terminated_global_info, skipping global log entry.")
         return True
 
     def _on_rollout_end(self) -> None:
@@ -554,8 +699,11 @@ class SectionLoggingCallback(BaseCallback):
         """
                This event is triggered before exiting the `learn()` method.
         """
-        if self.log_file:
-            self.log_file.close()
+        if self.log_file_section:
+            self.log_file_section.close()
+
+        if self.log_file_global:
+            self.log_file_global.close()
 
 
 def main():
@@ -569,8 +717,10 @@ def main():
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
-    model.learn(total_timesteps=10, log_interval=4,
-                callback=SectionLoggingCallback(log_path='training_log_sections.csv', verbose=0))
+    model.learn(total_timesteps=600,
+                callback=SectionLoggingCallback(log_path_section=os.path.join(os.getcwd(), 'training_log_sections.csv'),
+                                                log_path_global=os.path.join(os.getcwd(), 'training_log_global.csv'),
+                                                verbose=0))
 
     start_time = time.time()
     print(f"Training started at: {time.ctime(start_time)}")
