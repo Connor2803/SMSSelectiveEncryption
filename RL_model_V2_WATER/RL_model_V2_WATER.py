@@ -113,7 +113,7 @@ class Welford:
 
     def get_variance(self):
         if self.k < 2:
-            return 0
+            return [0.0] * 9
 
         self.reidentification_rate_V = self.reidentification_rate_S / (self.k - 1)
         self.reidentification_duration_V = self.reidentification_duration_S / (self.k - 1)
@@ -156,7 +156,7 @@ class Welford:
 
 
 class EncryptionSelectorEnv(gym.Env):
-    def __init__(self, dataset_type="train"):
+    def __init__(self, dataset_type: str):
         super().__init__()
         self._welford = Welford()
 
@@ -185,7 +185,7 @@ class EncryptionSelectorEnv(gym.Env):
         validation_households = validation_households_array.tolist()
         testing_households = testing_households_array.tolist()
 
-        self._active_households = None  # This will store the list of households for the current phase
+        self._active_households = None  # This will store the list of households for the current phase.
 
         # Populate training, validation, and testing dataframes based on the split household IDs.
         training_df = self._df[self._df["Household ID"].isin(training_households)]
@@ -313,7 +313,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         current_section_row = section_data_for_household.iloc[self._current_section_idx_in_household]
         section_utility_usage = current_section_row["Per Section Utility Usage"]
-        utility_readings_array = current_section_row["All Utility Readings in Section"]  # Get the actual array
+        utility_readings_array = current_section_row["All Utility Readings in Section"]
 
         # Calculate raw entropy for the current section using the time-series array
         section_raw_entropy = self._calculate_entropy(utility_readings_array)
@@ -456,11 +456,13 @@ class EncryptionSelectorEnv(gym.Env):
 
                 # 2. Run the Go program as a subprocess.
                 print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
+
                 go_result = subprocess.run(
-                    ["./generate_metrics", data_for_go_filepath],
-                    capture_output=True,
-                    text=True,
-                    check=True
+                        ["./generate_metrics_v2", data_for_go_filepath],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        timeout = 180 # seconds
                 )
 
                 print(f"Go Program stdout: {go_result.stdout}")
@@ -587,17 +589,6 @@ class EncryptionSelectorEnv(gym.Env):
     def render(self):
         pass
 
-
-def log_to_csv(writer, step_count, household_id, section_number, intermediate_reward, info_step):
-    writer.writerow([
-        step_count,
-        household_id,
-        section_number,
-        info_step.get('selected_encryption_ratio'),
-        intermediate_reward,
-    ])
-
-
 class SectionLoggingCallback(BaseCallback):
     """
     A custom callback that derives from ``BaseCallback``.
@@ -608,21 +599,19 @@ class SectionLoggingCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, log_path_section: str, log_path_global_train: str, log_path_global_test: str = None, verbose: int = 0):
+    def __init__(self, current_dataset_type: str, log_path_global_train: str, log_path_global_test_ph: str, log_path_global_test_combined, verbose: int = 0):
         super().__init__(verbose)
 
-        self.log_path_section = log_path_section
-        self.log_file_section = None
-        self.writer_section = None
+        # self.log_path_section = log_path_section
+        # self.log_file_section = None
+        # self.writer_section = None
 
+        self.current_dataset_type = current_dataset_type
         self.log_path_global_train = log_path_global_train
-        self.log_file_global_train = None
-        self.writer_global_train = None
-
-        self.log_path_global_test = log_path_global_test
-        self.log_file_global_test = None
-        self.writer_global_test = None
-
+        self.log_path_global_test_ph = log_path_global_test_ph
+        self.log_path_global_test_combined = log_path_global_test_combined
+        self.log_files = {}
+        self.writers = {}
         self.episode_num = 0
 
     def _on_training_start(self) -> None:
@@ -631,61 +620,45 @@ class SectionLoggingCallback(BaseCallback):
         """
         self.episode_num = 0
 
-        log_headers_section = [
-            "Step",
-            "Household ID",
-            "Section Number",
-            "Selected Encryption Ratio",
-            "Intermediate Reward"
-        ]
+        # log_headers_section = [
+        #     "Step",
+        #     "Household ID",
+        #     "Section Number",
+        #     "Selected Encryption Ratio",
+        #     "Intermediate Reward"
+        # ]
 
-        log_headers_global_train = [
-            "Episode",
-            "Training Households"
-            "Reidentification Rate",
-            "Reidentification Duration (NS)",
-            "Memory Consumption (MiB)",
-            "Summation Error",
-            "Deviation Error",
-            "Encryption Time (NS)",
-            "Decryption Time (NS)",
-            "Summation Operations Time (NS)",
-            "Deviation Operations Time (NS)",
-        ]
+        log_headers = ["Episode",
+                       "Processed Household(s)",
+                       "Reidentification Rate",
+                       "Reidentification Duration (NS)",
+                       "Memory Consumption (MiB)",
+                       "Summation Error",
+                       "Deviation Error",
+                       "Encryption Time (NS)",
+                       "Decryption Time (NS)",
+                       "Summation Operations Time (NS)",
+                       "Deviation Operations Time (NS)"
+                       ]
 
-        log_headers_global_test = [
-            "Episode",
-            "Household ID",
-            "Reidentification Rate",
-            "Reidentification Duration (NS)",
-            "Memory Consumption (MiB)",
-            "Summation Error",
-            "Deviation Error",
-            "Encryption Time (NS)",
-            "Decryption Time (NS)",
-            "Summation Operations Time (NS)",
-            "Deviation Operations Time (NS)",
-        ]
+        # try:
+        #     if self.log_path_section:
+        #         self.log_file_section = open(self.log_path_section, 'w', newline='')
+        #         self.writer_section = csv.writer(self.log_file_section)
+        #         self.writer_section.writerow(log_headers_section)
+        #
+        # except Exception as e:
+        #     print(f"ERROR: Failed to open log file or initialize CSV writer: {e}")
+        #     raise
 
-        try:
-            if self.log_path_section:
-                self.log_file_section = open(self.log_path_section, 'w', newline='')
-                self.writer_section = csv.writer(self.log_file_section)
-                self.writer_section.writerow(log_headers_section)
+        if self.log_path_global_train: self.log_files['train'] = open(self.log_path_global_train, 'w', newline='')
+        if self.log_path_global_test_ph: self.log_files['test_ph'] = open(self.log_path_global_test_ph, 'w', newline='')
+        if self.log_path_global_test_combined: self.log_files['test_combined'] = open(
+            self.log_path_global_test_combined, 'w', newline='')
 
-            if self.log_path_global_train:
-                self.log_file_global_train = open(self.log_path_global_train, 'w', newline='')
-                self.writer_global_train = csv.writer(self.log_file_global_train)
-                self.writer_global_train.writerow(log_headers_global_train)
-
-            if self.log_path_global_test:
-                self.log_file_global_test = open(self.log_path_global_test, 'w', newline='')
-                self.writer_global_test = csv.writer(self.log_file_global_test)
-                self.writer_global_test.writerow(log_headers_global_test)
-
-        except Exception as e:
-            print(f"ERROR: Failed to open log file or initialize CSV writer: {e}")
-            raise
+        for name, file in self.log_files.items():
+            self.writers[name] = csv.writer(file)
+            self.writers[name].writerow(log_headers)
 
     def _on_step(self) -> bool:
         """
@@ -696,65 +669,44 @@ class SectionLoggingCallback(BaseCallback):
 
         :return: If the callback returns False, training is aborted early.
         """
-        env_instance = self.training_env.unwrapped
-        env_dataset_type = env_instance.dataset_type
 
-        if self.log_path_section and len(self.locals['infos']) > 0:
-            info = self.locals['infos'][0]
-            if not self.locals['dones'][0]:  # Only log section data if the episode is NOT terminated in this step
-                chosen_ratio_info = env_instance._chosen_encryption_ratios.get(
-                    (info['household_id'], info['section_number']))
-                if chosen_ratio_info:
-                    self.writer_section.writerow([
-                        self.n_calls,
-                        info.get('household_id'),
-                        info.get('section_number'),
-                        chosen_ratio_info.get('ratio'),
-                        self.locals['rewards'][0],  # Intermediate reward, i.e., remaining entropy.
-                    ])
+        # if self.log_path_section and len(self.locals['infos']) > 0:
+        #     if not self.locals['dones'][0]:  # Only log section data if the episode is NOT terminated in this step
+        #         chosen_ratio_info = env_instance._chosen_encryption_ratios.get(
+        #             (info['household_id'], info['section_number']))
+        #         if chosen_ratio_info:
+        #             self.writer_section.writerow([
+        #                 self.n_calls,
+        #                 info.get('household_id'),
+        #                 info.get('section_number'),
+        #                 chosen_ratio_info.get('ratio'),
+        #                 self.locals['rewards'][0],  # Intermediate reward, i.e., remaining entropy.
+        #             ])
 
-        if self.locals['dones'][0]:  # The episode has just finished.
+        if self.locals['dones'][0]:
             self.episode_num += 1
-            global_info = self.locals['infos'][0].get('global_metrics')
-            terminated_household_id = self.locals['infos'][0].get('terminated_household_id')
-            training_households = self.locals['infos'][0].get('training_households')
+            info = self.locals['infos'][0]
+            global_info = info.get('global_metrics')
 
-            if env_dataset_type == 'train' and self.log_path_global_train:
-                if global_info:
-                    self.writer_global_train.writerow([
-                        self.episode_num,
-                        training_households,
-                        global_info["global_reidentification_rate"],
-                        global_info["global_reidentification_duration"],
-                        global_info["global_memory_consumption"],
-                        global_info["global_summation_error"],
-                        global_info["global_deviation_error"],
-                        global_info["global_encryption_time"],
-                        global_info["global_decryption_time"],
-                        global_info["global_summation_operations_time"],
-                        global_info["global_deviation_operations_time"],
-                    ])
-                else:
-                    print(f"WARNING: Global metrics not found for training episode {self.episode_num}. Skipping log entry.")
-            elif env_dataset_type == 'test' and self.log_path_global_test:
-                if global_info:
-                    self.writer_global_test.writerow([
-                        self.episode_num,
-                        terminated_household_id,
-                        global_info["global_reidentification_rate"],
-                        global_info["global_reidentification_duration"],
-                        global_info["global_memory_consumption"],
-                        global_info["global_summation_error"],
-                        global_info["global_deviation_error"],
-                        global_info["global_encryption_time"],
-                        global_info["global_decryption_time"],
-                        global_info["global_summation_operations_time"],
-                        global_info["global_deviation_operations_time"],
-                    ])
-                else:
-                    print(f"WARNING: Global metrics not found for testing episode {self.episode_num}. Skipping log entry.")
-            else:
-                print("WARNING: Global metrics not found in info or from _get_terminated_global_info, skipping global log entry.")
+            writer = None
+            households_to_log = "N/A"
+
+            if self.current_dataset_type == 'train':
+                writer = self.writers.get('train')
+                households_to_log = info.get('training_households')
+            elif self.current_dataset_type == 'test_combined':
+                if info.get('testing_households_in_run'):
+                    writer = self.writers.get('test_combined')
+                    households_to_log = info.get('testing_households_in_run')
+            elif self.current_dataset_type == 'test_ph':
+                    writer = self.writers.get('test_ph')
+                    households_to_log = info.get('terminated_household_id')
+
+            if writer and global_info:
+                writer.writerow([self.episode_num, households_to_log] + list(global_info.values()))
+            elif writer:
+                print(
+                    f"WARNING: Global metrics not found for {self.current_dataset_type} episode {self.episode_num}. Skipping log.")
         return True
 
     def _on_rollout_end(self) -> None:
@@ -767,14 +719,11 @@ class SectionLoggingCallback(BaseCallback):
         """
                This event is triggered before exiting the `learn()` method.
         """
-        if self.log_file_section:
-            self.log_file_section.close()
+        # if self.log_file_section:
+        #     self.log_file_section.close()
 
-        if self.log_file_global_test:
-            self.log_file_global_test.close()
-
-        if self.log_file_global_train:
-            self.log_file_global_train.close()
+        for file in self.log_files.values():
+            file.close()
 
 
 def main():
@@ -785,88 +734,130 @@ def main():
         return
 
     # ----- TRAINING PHASE ------
+    start_time_train = time.time()
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
-    model.learn(total_timesteps=600,
-                callback=SectionLoggingCallback(log_path_section=None,
-                                                log_path_global_train=os.path.join(os.getcwd(), 'V2_training_log_global.csv'),
-                                                log_path_global_test=None,
-                                                verbose=0))
-
-    start_time = time.time()
-    print(f"Training started at: {time.ctime(start_time)}")
-
+    callback = SectionLoggingCallback(
+        current_dataset_type="train",
+        log_path_global_train=os.path.join(os.getcwd(), 'V2_training_log_global.csv'),
+        log_path_global_test_ph=None,
+        log_path_global_test_combined=None,
+        verbose=0)
+    model.learn(total_timesteps=600000,callback=callback)
     model.save("DQN_Encryption_Ratio_Selector_V2")
 
-    end_time = time.time()
-    print(f"Training finished at: {time.ctime(end_time)}")
-    elapsed_time = end_time - start_time
-    print(f"Total training duration: {elapsed_time:.2f} seconds")
+    end_time_train = time.time()
+    print(f"Training finished at: {time.ctime(end_time_train)}")
+    elapsed_time_train = end_time_train - start_time_train
+    print(f"Total training duration: {elapsed_time_train:.2f} seconds")
 
     del model
 
-    # ----- VALIDATION PHASE ------
-    print("\n----- VALIDATION PHASE ------")
-    start_time = time.time()
+    # # ----- VALIDATION PHASE ------
+    # print("\n----- VALIDATION PHASE ------")
+    # start_time_val = time.time()
+    #
+    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    # env_val = EncryptionSelectorEnv(dataset_type="validation")
+    # env_val.reset()
+    # model.set_env(env_val)
+    #
+    # mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    # print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
+    #
+    # end_time_val = time.time()
+    # print(f"Validation finished at: {time.ctime(end_time_val)}")
+    # elapsed_time_val = end_time_val - start_time_val
+    # print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
+    #
+    # # ----- TESTING PHASE (Combined) ------
+    # print("\n----- TESTING PHASE (Combined) ------")
+    # start_time_combined = time.time()
+    #
+    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    # env_test_combined = EncryptionSelectorEnv(dataset_type="test")
+    # model.set_env(env_test_combined)
+    #
+    # combined_test_callback = SectionLoggingCallback(
+    #     current_dataset_type="test_combined",
+    #     log_path_global_train=None,
+    #     log_path_global_test_ph=None,
+    #     log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
+    #     verbose=0
+    # )
+    # combined_test_callback.init_callback(model)
+    # combined_test_callback._on_training_start()
+    #
+    # obs, info = env_test_combined.reset()
+    # done = False
+    # episode_reward = 0
+    # while not done:
+    #     action, _states = model.predict(obs, deterministic=True)
+    #     obs, reward, terminated, truncated, info = env_test_combined.step(action)
+    #     done = terminated or truncated
+    #     episode_reward += reward
+    #
+    #     if done:
+    #         info['testing_households_in_run'] = env_test_combined._testing_households
+    #
+    #     combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
+    #     combined_test_callback._on_step()
+    #
+    # print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
+    # combined_test_callback._on_training_end()
+    #
+    # end_time_combined = time.time()
+    # print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
+    # elapsed_time_combined = end_time_combined - start_time_combined
+    # print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
 
-    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    env_val = EncryptionSelectorEnv(dataset_type="validation")
-
-    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
-    print(f"Validation - Mean reward: {mean_reward:.2f} +/- {std_reward:.2f}")
-
-    end_time = time.time()
-    print(f"Validation finished at: {time.ctime(end_time)}")
-    elapsed_time = end_time - start_time
-    print(f"Total validation duration: {elapsed_time:.2f} seconds")
-
-    # ----- TESTING PHASE ------
-    print("\n----- TESTING PHASE ------")
-    start_time = time.time()
-
-    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    env_test = EncryptionSelectorEnv(dataset_type="test")
-    model.set_env(env_test)
-
-    test_callback = SectionLoggingCallback(
-        log_path_section=None,
-        log_path_global_train=None,
-        log_path_global_test=os.path.join(os.getcwd(), 'V2_testing_log_global.csv'),
-        verbose=0
-    )
-
-    obs, info = env_test.reset()
-    done = False
-    episode_reward = 0
-    episodes_run = 0
-
-    test_callback.init_callback(model)
-    test_callback._on_training_start()
-
-    while episodes_run < len(env_test._active_households):
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env_test.step(action)
-        done = terminated or truncated
-        episode_reward += reward
-
-        test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
-        test_callback._on_step()
-
-        if done:
-            print(f"Test Episode {episodes_run + 1} finished. Reward: {episode_reward:.2f}")
-            episode_reward = 0
-            episodes_run += 1
-            if episodes_run < len(env_test._active_households):
-                obs, info = env_test.reset()
-                # The callback's _on_step already handles episode_num increment for global log
-
-    test_callback._on_training_end()
-
-    end_time = time.time()
-    print(f"Testing finished at: {time.ctime(end_time)}")
-    elapsed_time = end_time - start_time
-    print(f"Total testing duration: {elapsed_time:.2f} seconds")
+    # # ----- TESTING PHASE (Per-Household) ------
+    # print("\n----- TESTING PHASE (Per-Household) ------")
+    # start_time_ph = time.time()
+    #
+    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    #
+    # temp_env_for_ids = EncryptionSelectorEnv(dataset_type="test")
+    # testing_household_ids = temp_env_for_ids._testing_households
+    # del temp_env_for_ids
+    #
+    # ph_callback = SectionLoggingCallback(
+    #     current_dataset_type="test_ph",
+    #     log_path_global_train=None,
+    #     log_path_global_test_ph=os.path.join(os.getcwd(), 'V2_testing_log_ph.csv'),
+    #     log_path_global_test_combined=None,
+    #     verbose=0
+    # )
+    #
+    # ph_callback.init_callback(model)
+    # ph_callback._on_training_start()
+    #
+    # for i, household_id in enumerate(testing_household_ids):
+    #     print(f"\n--- Running test for Household: {household_id} ({i + 1}/{len(testing_household_ids)}) ---")
+    #
+    #     env_test_single = EncryptionSelectorEnv(dataset_type="test")
+    #     env_test_single._active_households = [household_id]
+    #
+    #     model.set_env(env_test_single)
+    #
+    #     obs, info = env_test_single.reset()
+    #     done = False
+    #     while not done:
+    #         action, _states = model.predict(obs, deterministic=True)
+    #         obs, reward, terminated, truncated, info = env_test_single.step(action)
+    #         done = terminated or truncated
+    #
+    #         ph_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
+    #         ph_callback._on_step()
+    #
+    #
+    # ph_callback._on_training_end()
+    #
+    # end_time_ph = time.time()
+    # print(f"Per-household testing finished at: {time.ctime(end_time_ph)}")
+    # elapsed_time_ph = end_time_ph - start_time_ph
+    # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
 
 if __name__ == "__main__":
     main()

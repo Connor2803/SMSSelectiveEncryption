@@ -67,9 +67,9 @@ type Section struct {
 const MAXPARTYROWS = 10240                         // Maximum number of water meter readings to be included in the experiment from the original dataset.
 const MAXSECTIONNUMBER = 10                        /// Maximum number of sections to be included in a household (each section will contain MAXPARTYROWS / SECTIONSIZE reading entries).
 const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
-var maxReidentificationAttempts = 10               // Default value for number of loops for runReidentificationAttack.
+var maxReidentificationAttempts = 100              // Default value for number of loops for runReidentificationAttack.
 var leakedPlaintextSize = 12                       // Number of water meter readings included in the leaked attacker data
-var reidentificationMatchThreshold = 90            // Default value for minimum percentage match for identification.
+var reidentificationMatchThreshold = 70            // Default value for minimum percentage match for identification.
 var usedRandomSectionsByParty = map[string][]int{} // 2D slice to hold which household sections have been used as the attacker block.
 
 func bToMb(b uint64) uint64 {
@@ -97,6 +97,9 @@ func main() {
 	// 2. Read the RL agent's choices from the JSON file
 	choices, err := readRLChoices(rlChoicesPath)
 	check(err)
+	if len(choices) == 100 {
+		maxReidentificationAttempts = 30 // As validation and testing dataset much smaller.
+	}
 
 	// 3. Load raw data from the master inputs.csv file
 	parties, err := loadDataFromInputsCSV("./inputs_V2_WATER.csv", choices)
@@ -164,6 +167,7 @@ func main() {
 	output, err := json.Marshal(finalResults)
 	check(err)
 	fmt.Println(string(output)) // This is captured by the Python script.
+
 }
 
 // readRLChoices parses the JSON file created by the Python script.
@@ -490,8 +494,8 @@ func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reid
 
 	for !valid {
 		iteration++
-		if iteration > 10000 {
-			fmt.Fprintln(os.Stderr, "WARNING: identifySourceHousehold - Could not find a unique data block after 10000 iterations. Skipping this attack run.")
+		if iteration > 500 {
+			fmt.Fprintln(os.Stderr, "WARNING: identifySourceHousehold - Could not find a unique data block after 500 iterations. Skipping this attack run.")
 			return 0
 		}
 		randomPartyID = partyIDs[rand.Intn(len(partyIDs))]
