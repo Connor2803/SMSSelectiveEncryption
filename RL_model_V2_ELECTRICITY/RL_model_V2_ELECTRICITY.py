@@ -163,10 +163,10 @@ class EncryptionSelectorEnv(gym.Env):
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Read the inputs CSV file generated from Electricity dataset.
-        self._df = pd.read_csv("./inputs_V2_ELECTRICITY.csv", header=0)
+        self._df = pd.read_csv("./RL_model_V2_ELECTRICITY/inputs_V2_ELECTRICITY.csv", header=0)
 
         # Retrieve the unique household IDs from the Electricity dataset.
-        electricity_households_data_folder_path = '../examples/datasets/electricity/households_10240'
+        electricity_households_data_folder_path = './examples/datasets/electricity/households_10240'
         try:
             folder_filenames_raw = os.listdir(electricity_households_data_folder_path)
             folder_filenames_sorted = sorted(folder_filenames_raw)  # Sorted alphabetically.
@@ -762,7 +762,7 @@ class SectionLoggingCallback(BaseCallback):
 
 def main():
     try:
-        subprocess.run(["go", "build", "-o", "generate_metrics_v2", "./generate_metrics_V2.go"], check=True)
+        subprocess.run(["go", "build", "-o", "./RL_model_V2_ELECTRICITY/generate_metrics_v2", "./RL_model_V2_ELECTRICITY/generate_metrics_V2.go"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Failed to compile Go program: {e}")
         return
@@ -774,12 +774,12 @@ def main():
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
     callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), 'V2_training_log_global.csv'),
+        log_path_global_train=os.path.join(os.getcwd(), './RL_model_V2_ELECTRICITY/V2_training_log_global.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
     model.learn(total_timesteps=60000, callback=callback)
-    model.save("DQN_Encryption_Ratio_Selector_V2")
+    model.save("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
 
     end_time_train = time.time()
     print(f"Training finished at: {time.ctime(end_time_train)}")
@@ -792,7 +792,7 @@ def main():
     print("\n----- VALIDATION PHASE ------")
     start_time_val = time.time()
 
-    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    model = DQN.load("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -809,7 +809,7 @@ def main():
     print("\n----- TESTING PHASE (Combined) ------")
     start_time_combined = time.time()
 
-    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    model = DQN.load("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test")
     model.set_env(env_test_combined)
 
@@ -817,7 +817,7 @@ def main():
         current_dataset_type="test_combined",
         log_path_global_train=None,
         log_path_global_test_ph=None,
-        log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
+        log_path_global_test_combined=os.path.join(os.getcwd(), './RL_model_V2_ELECTRICITY/V2_testing_log_combined.csv'),
         verbose=0
     )
     combined_test_callback.init_callback(model)

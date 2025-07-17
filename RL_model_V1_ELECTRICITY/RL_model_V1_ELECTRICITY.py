@@ -1,4 +1,4 @@
-# python ./RL_model_V1_ELECTRICITY/RL_model_V!_ELECTRICITY.py
+# python ./RL_model_V1_ELECTRICITY/RL_model_V1_ELECTRICITY.py
 import os
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -21,11 +21,11 @@ class EncryptionSelectorEnv(gym.Env):
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Read the ML metrics CSV file for Electricity dataset.
-        df = pd.read_csv("./ML_metrics_ELECTRICITY.csv", header=0)
-        df_HE = pd.read_csv("./ML_party_metrics_ELECTRICITY.csv", header=0)
+        df = pd.read_csv("./RL_model_V1_ELECTRICITY/ML_metrics_ELECTRICITY.csv", header=0)
+        df_HE = pd.read_csv("./RL_model_V1_ELECTRICITY/ML_party_metrics_ELECTRICITY.csv", header=0)
 
         # Retrieve the unique household IDs from the Electricity dataset.
-        electricity_households_data_folder_path = '../examples/datasets/electricity/households_10240'
+        electricity_households_data_folder_path = './examples/datasets/electricity/households_10240'
         try:
             folder_filenames_raw = os.listdir(electricity_households_data_folder_path)
             folder_filenames_sorted = sorted(folder_filenames_raw)  # Sorted alphabetically.
@@ -378,7 +378,7 @@ def main():
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     # Training file log creation
-    log_file_name = "V1_training_log_ELECTRICITY.csv"
+    log_file_name = "./RL_model_V1_ELECTRICITY/V1_training_log_ELECTRICITY.csv"
     csv_file = None
     csv_writer = None
 
@@ -407,7 +407,7 @@ def main():
 
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
         model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
-        model.save("DQN_Encryption_Ratio_Selector_V1")
+        model.save("./RL_model_V1_ELECTRICITY/DQN_Encryption_Ratio_Selector_V1")
 
         end_time = time.time()
         print(f"Training finished at: {time.ctime(end_time)}")
@@ -433,7 +433,7 @@ def main():
 
     # ----- VALIDATION PHASE ------
     print("\n--- Starting Validation ---")
-    model = DQN.load("DQN_Encryption_Ratio_Selector_V1")
+    model = DQN.load("./RL_model_V1_ELECTRICITY/DQN_Encryption_Ratio_Selector_V1")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -466,7 +466,7 @@ def main():
     env_test = EncryptionSelectorEnv(dataset_type="test")
     testing_households = env_test._active_households.copy()
 
-    with open('V1_testing_log_ELECTRICITY.csv', 'w', newline='') as file:
+    with open('./RL_model_V1_ELECTRICITY/V1_testing_log_ELECTRICITY.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(log_headers)
 
