@@ -1,6 +1,5 @@
 # python ./RL_model_V1_WATER/RL_mmodel_V1_WATER.py
 import os
-from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
