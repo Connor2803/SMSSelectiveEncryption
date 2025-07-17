@@ -1,8 +1,9 @@
 # python ./RL_model_V1_ELECTRICITY/RL_model_V!_ELECTRICITY.py
-
+import os
 from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
+from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.dqn.policies import MultiInputPolicy
 from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
@@ -25,7 +26,19 @@ class EncryptionSelectorEnv(gym.Env):
         df_HE = pd.read_csv("./ML_party_metrics_ELECTRICITY.csv", header=0)
 
         # Retrieve the unique household IDs from the Electricity dataset.
-        unique_household_IDs = df["filename"].unique()
+        electricity_households_data_folder_path = '../examples/datasets/electricity/households_10240'
+        try:
+            folder_filenames_raw = os.listdir(electricity_households_data_folder_path)
+            folder_filenames_sorted = sorted(folder_filenames_raw)  # Sorted alphabetically.
+        except FileNotFoundError:
+            print(f"Error: Folder not found at {electricity_households_data_folder_path}. Please check the path.")
+            folder_filenames_sorted = []
+
+        unique_household_IDs_from_df = df["filename"].unique()
+        ordered_unique_household_IDs = [
+            filename for filename in folder_filenames_sorted if filename in unique_household_IDs_from_df
+        ]
+        unique_household_IDs = ordered_unique_household_IDs
 
         # Create permanent testing household subset for comparative performance analysis.
         permanent_testing_IDs = unique_household_IDs[-10:]
@@ -408,25 +421,31 @@ def main():
     print("\n--- Starting Validation ---")
     model = DQN.load("DQN_Encryption_Ratio_Selector_V1")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
-    num_validation_households = len(env_val._active_households)
+    env_val.reset()
+    model.set_env(env_val)
 
-    with open('V!_validation_log_ELECTRICITY.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(log_headers)
+    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
 
-        obs, info = env_val.reset()
-        for i in range(num_validation_households):
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info_step = env_val.step(action)
-
-            household_id = info_step.get('household_id')
-            print(
-                f"Validated Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
-
-            log_to_csv(writer, i + 1, household_id, reward, info_step)
-
-            if terminated or truncated:
-                obs, info = env_val.reset()
+    # num_validation_households = len(env_val._active_households)
+    #
+    # with open('V!_validation_log_ELECTRICITY.csv', 'w', newline='') as file:
+    #     writer = csv.writer(file)
+    #     writer.writerow(log_headers)
+    #
+    #     obs, info = env_val.reset()
+    #     for i in range(num_validation_households):
+    #         action, _ = model.predict(obs, deterministic=True)
+    #         obs, reward, terminated, truncated, info_step = env_val.step(action)
+    #
+    #         household_id = info_step.get('household_id')
+    #         print(
+    #             f"Validated Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
+    #
+    #         log_to_csv(writer, i + 1, household_id, reward, info_step)
+    #
+    #         if terminated or truncated:
+    #             obs, info = env_val.reset()
 
     # ----- TESTING PHASE ------
     print("\n--- Starting Testing ---")

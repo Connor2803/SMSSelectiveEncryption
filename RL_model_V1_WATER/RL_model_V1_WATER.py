@@ -1,8 +1,9 @@
 # python ./RL_model_V1_WATER/RL_mmodel_V1_WATER.py
-
+import os
 from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
+from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.dqn.policies import MultiInputPolicy
 from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
@@ -25,7 +26,19 @@ class EncryptionSelectorEnv(gym.Env):
         df_HE = pd.read_csv("./ML_party_metrics_WATER.csv", header=0)
 
         # Retrieve the unique household IDs from the Water dataset.
-        unique_household_IDs = df["filename"].unique()
+        water_households_data_folder_path = '../examples/datasets/water/households_10240'
+        try:
+            folder_filenames_raw = os.listdir(water_households_data_folder_path)
+            folder_filenames_sorted = sorted(folder_filenames_raw) # Sorted alphabetically.
+        except FileNotFoundError:
+            print(f"Error: Folder not found at {water_households_data_folder_path}. Please check the path.")
+            folder_filenames_sorted = []
+
+        unique_household_IDs_from_df = df["filename"].unique()
+        ordered_unique_household_IDs = [
+            filename for filename in folder_filenames_sorted if filename in unique_household_IDs_from_df
+        ]
+        unique_household_IDs = ordered_unique_household_IDs
 
         # Create permanent testing household subset for comparative performance analysis.
         permanent_testing_IDs = unique_household_IDs[-10:]
@@ -227,12 +240,10 @@ class EncryptionSelectorEnv(gym.Env):
             "scaled_deviation_operations_time": scaled_current_deviation_operations_time,
         }
 
-        w_asr_attack_time = 1.2
-
         # Positive contribution: asr_attack_duration, decryption_time
         # Negative contribution: scaled_current_asr_mean, scaled_current_remaining_entropy, scaled_current_memory, summation_error, deviation_error, encryption_time, summation_operations_time, deviation_operations_time
 
-        reward = (w_asr_attack_time * scaled_current_asr_attack_duration) + scaled_current_decryption_time - scaled_current_asr_mean - scaled_current_remaining_entropy - scaled_current_memory - scaled_current_summation_error - scaled_current_deviation_error - scaled_current_encryption_time - scaled_current_summation_operations_time - scaled_current_deviation_operations_time
+        reward = scaled_current_asr_attack_duration + scaled_current_decryption_time - scaled_current_asr_mean - scaled_current_remaining_entropy - scaled_current_memory - scaled_current_summation_error - scaled_current_deviation_error - scaled_current_encryption_time - scaled_current_summation_operations_time - scaled_current_deviation_operations_time
 
         terminated = True  # As this is a single-step episode.
         truncated = False  # As this is a single-step episode.
@@ -406,27 +417,33 @@ def main():
 
     # ----- VALIDATION PHASE ------
     print("\n--- Starting Validation ---")
-    model = DQN.load("dqn_encryption_selector")
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V1")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
-    num_validation_households = len(env_val._active_households)
+    env_val.reset()
+    model.set_env(env_val)
 
-    with open('V!_validation_log_WATER.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(log_headers)
+    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
 
-        obs, info = env_val.reset()
-        for i in range(num_validation_households):
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info_step = env_val.step(action)
-
-            household_id = info_step.get('household_id')
-            print(
-                f"Validated Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
-
-            log_to_csv(writer, i + 1, household_id, reward, info_step)
-
-            if terminated or truncated:
-                obs, info = env_val.reset()
+    # num_validation_households = len(env_val._active_households)
+    #
+    # with open('V!_validation_log_WATER.csv', 'w', newline='') as file:
+    #     writer = csv.writer(file)
+    #     writer.writerow(log_headers)
+    #
+    #     obs, info = env_val.reset()
+    #     for i in range(num_validation_households):
+    #         action, _ = model.predict(obs, deterministic=True)
+    #         obs, reward, terminated, truncated, info_step = env_val.step(action)
+    #
+    #         household_id = info_step.get('household_id')
+    #         print(
+    #             f"Validated Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
+    #
+    #         log_to_csv(writer, i + 1, household_id, reward, info_step)
+    #
+    #         if terminated or truncated:
+    #             obs, info = env_val.reset()
 
     # ----- TESTING PHASE ------
     print("\n--- Starting Testing ---")

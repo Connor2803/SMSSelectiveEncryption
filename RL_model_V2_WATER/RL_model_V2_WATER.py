@@ -754,110 +754,110 @@ def main():
 
     del model
 
-    # # ----- VALIDATION PHASE ------
-    # print("\n----- VALIDATION PHASE ------")
-    # start_time_val = time.time()
-    #
-    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    # env_val = EncryptionSelectorEnv(dataset_type="validation")
-    # env_val.reset()
-    # model.set_env(env_val)
-    #
-    # mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
-    # print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
-    #
-    # end_time_val = time.time()
-    # print(f"Validation finished at: {time.ctime(end_time_val)}")
-    # elapsed_time_val = end_time_val - start_time_val
-    # print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
-    #
-    # # ----- TESTING PHASE (Combined) ------
-    # print("\n----- TESTING PHASE (Combined) ------")
-    # start_time_combined = time.time()
-    #
-    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    # env_test_combined = EncryptionSelectorEnv(dataset_type="test")
-    # model.set_env(env_test_combined)
-    #
-    # combined_test_callback = SectionLoggingCallback(
-    #     current_dataset_type="test_combined",
-    #     log_path_global_train=None,
-    #     log_path_global_test_ph=None,
-    #     log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
-    #     verbose=0
-    # )
-    # combined_test_callback.init_callback(model)
-    # combined_test_callback._on_training_start()
-    #
-    # obs, info = env_test_combined.reset()
-    # done = False
-    # episode_reward = 0
-    # while not done:
-    #     action, _states = model.predict(obs, deterministic=True)
-    #     obs, reward, terminated, truncated, info = env_test_combined.step(action)
-    #     done = terminated or truncated
-    #     episode_reward += reward
-    #
-    #     if done:
-    #         info['testing_households_in_run'] = env_test_combined._testing_households
-    #
-    #     combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
-    #     combined_test_callback._on_step()
-    #
-    # print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
-    # combined_test_callback._on_training_end()
-    #
-    # end_time_combined = time.time()
-    # print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
-    # elapsed_time_combined = end_time_combined - start_time_combined
-    # print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
+    # ----- VALIDATION PHASE ------
+    print("\n----- VALIDATION PHASE ------")
+    start_time_val = time.time()
 
-    # # ----- TESTING PHASE (Per-Household) ------
-    # print("\n----- TESTING PHASE (Per-Household) ------")
-    # start_time_ph = time.time()
-    #
-    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    #
-    # temp_env_for_ids = EncryptionSelectorEnv(dataset_type="test")
-    # testing_household_ids = temp_env_for_ids._testing_households
-    # del temp_env_for_ids
-    #
-    # ph_callback = SectionLoggingCallback(
-    #     current_dataset_type="test_ph",
-    #     log_path_global_train=None,
-    #     log_path_global_test_ph=os.path.join(os.getcwd(), 'V2_testing_log_ph.csv'),
-    #     log_path_global_test_combined=None,
-    #     verbose=0
-    # )
-    #
-    # ph_callback.init_callback(model)
-    # ph_callback._on_training_start()
-    #
-    # for i, household_id in enumerate(testing_household_ids):
-    #     print(f"\n--- Running test for Household: {household_id} ({i + 1}/{len(testing_household_ids)}) ---")
-    #
-    #     env_test_single = EncryptionSelectorEnv(dataset_type="test")
-    #     env_test_single._active_households = [household_id]
-    #
-    #     model.set_env(env_test_single)
-    #
-    #     obs, info = env_test_single.reset()
-    #     done = False
-    #     while not done:
-    #         action, _states = model.predict(obs, deterministic=True)
-    #         obs, reward, terminated, truncated, info = env_test_single.step(action)
-    #         done = terminated or truncated
-    #
-    #         ph_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
-    #         ph_callback._on_step()
-    #
-    #
-    # ph_callback._on_training_end()
-    #
-    # end_time_ph = time.time()
-    # print(f"Per-household testing finished at: {time.ctime(end_time_ph)}")
-    # elapsed_time_ph = end_time_ph - start_time_ph
-    # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    env_val = EncryptionSelectorEnv(dataset_type="validation")
+    env_val.reset()
+    model.set_env(env_val)
+
+    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
+
+    end_time_val = time.time()
+    print(f"Validation finished at: {time.ctime(end_time_val)}")
+    elapsed_time_val = end_time_val - start_time_val
+    print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
+
+    # ----- TESTING PHASE (Combined) ------
+    print("\n----- TESTING PHASE (Combined) ------")
+    start_time_combined = time.time()
+
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    env_test_combined = EncryptionSelectorEnv(dataset_type="test")
+    model.set_env(env_test_combined)
+
+    combined_test_callback = SectionLoggingCallback(
+        current_dataset_type="test_combined",
+        log_path_global_train=None,
+        log_path_global_test_ph=None,
+        log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
+        verbose=0
+    )
+    combined_test_callback.init_callback(model)
+    combined_test_callback._on_training_start()
+
+    obs, info = env_test_combined.reset()
+    done = False
+    episode_reward = 0
+    while not done:
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = env_test_combined.step(action)
+        done = terminated or truncated
+        episode_reward += reward
+
+        if done:
+            info['testing_households_in_run'] = env_test_combined._testing_households
+
+        combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
+        combined_test_callback._on_step()
+
+    print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
+    combined_test_callback._on_training_end()
+
+    end_time_combined = time.time()
+    print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
+    elapsed_time_combined = end_time_combined - start_time_combined
+    print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
+
+    # ----- TESTING PHASE (Per-Household) ------
+    print("\n----- TESTING PHASE (Per-Household) ------")
+    start_time_ph = time.time()
+
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+
+    temp_env_for_ids = EncryptionSelectorEnv(dataset_type="test")
+    testing_household_ids = temp_env_for_ids._testing_households
+    del temp_env_for_ids
+
+    ph_callback = SectionLoggingCallback(
+        current_dataset_type="test_ph",
+        log_path_global_train=None,
+        log_path_global_test_ph=os.path.join(os.getcwd(), 'V2_testing_log_ph.csv'),
+        log_path_global_test_combined=None,
+        verbose=0
+    )
+
+    ph_callback.init_callback(model)
+    ph_callback._on_training_start()
+
+    for i, household_id in enumerate(testing_household_ids):
+        print(f"\n--- Running test for Household: {household_id} ({i + 1}/{len(testing_household_ids)}) ---")
+
+        env_test_single = EncryptionSelectorEnv(dataset_type="test")
+        env_test_single._active_households = [household_id]
+
+        model.set_env(env_test_single)
+
+        obs, info = env_test_single.reset()
+        done = False
+        while not done:
+            action, _states = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = env_test_single.step(action)
+            done = terminated or truncated
+
+            ph_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
+            ph_callback._on_step()
+
+
+    ph_callback._on_training_end()
+
+    end_time_ph = time.time()
+    print(f"Per-household testing finished at: {time.ctime(end_time_ph)}")
+    elapsed_time_ph = end_time_ph - start_time_ph
+    print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
 
 if __name__ == "__main__":
     main()
