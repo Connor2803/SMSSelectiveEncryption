@@ -5,6 +5,7 @@ import json
 import math
 import os
 import subprocess
+import sys
 import time
 from collections import Counter
 
@@ -18,6 +19,12 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.dqn.policies import MultiInputPolicy
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+EXECUTABLE_NAME = "generate_metrics_v2"
+if sys.platform == "win32":
+    EXECUTABLE_NAME += ".exe"
+GO_SOURCE_PATH = os.path.join(SCRIPT_DIR, "generate_metrics_V2.go")
+GO_EXECUTABLE_PATH = os.path.join(SCRIPT_DIR, EXECUTABLE_NAME)
 
 class Welford:
     def __init__(self):
@@ -458,7 +465,7 @@ class EncryptionSelectorEnv(gym.Env):
                     }
                     for k, v in self._chosen_encryption_ratios.items()
                 ]
-                data_for_go_filepath = "./RL_model_V2_ELECTRCITY/RL_V2_choices.json"
+                data_for_go_filepath = os.path.join(SCRIPT_DIR, "RL_V2_choices.json")
 
                 print(f"\nDEBUG: Data for Go program (first entry, total {len(data_for_go)}):")
                 for i, entry in enumerate(data_for_go[:1]):
@@ -473,7 +480,7 @@ class EncryptionSelectorEnv(gym.Env):
                 print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                        ["./RL_model_V2_ELECTRICITY/generate_metrics_v2", data_for_go_filepath],
+                        [GO_EXECUTABLE_PATH, data_for_go_filepath],
                         capture_output=True,
                         text=True,
                         check=True,
@@ -762,7 +769,7 @@ class SectionLoggingCallback(BaseCallback):
 
 def main():
     try:
-        subprocess.run(["go", "build", "-o", "./RL_model_V2_ELECTRICITY/generate_metrics_v2", "./RL_model_V2_ELECTRICITY/generate_metrics_V2.go"], check=True)
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Failed to compile Go program: {e}")
         return
