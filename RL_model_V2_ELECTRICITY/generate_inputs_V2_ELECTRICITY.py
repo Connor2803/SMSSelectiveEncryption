@@ -19,7 +19,7 @@ def main():
         return
 
     for file_path in csv_files:
-        household_id = os.path.splitext(os.path.basename(file_path))[0]
+        household_id = os.path.basename(file_path)
 
         utility_readings_current_file = []
         utility_reading_dates_current_file = []
@@ -55,8 +55,7 @@ def main():
                 section_dates = utility_reading_dates_current_file[start_index:end_index]
 
                 if section_readings:
-                    # Water readings are in reverse chronological order, the first date is the latest.
-                    date_range = f"{section_dates[-1]} - {section_dates[0]}"  # Oldest date - Newest date.
+                    date_range = f"{section_dates[0]} - {section_dates[1]}"  # Oldest date - Newest date.
                     total_usage_in_section = sum(section_readings)
 
                     all_household_output_data.append([

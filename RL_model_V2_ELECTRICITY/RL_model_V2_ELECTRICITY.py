@@ -165,7 +165,7 @@ class EncryptionSelectorEnv(gym.Env):
         # Read the inputs CSV file generated from Electricity dataset.
         self._df = pd.read_csv("./inputs_V2_ELECTRICITY.csv", header=0)
 
-        # Retrieve the unique household IDs from the Water dataset.
+        # Retrieve the unique household IDs from the Electricity dataset.
         electricity_households_data_folder_path = '../examples/datasets/electricity/households_10240'
         try:
             folder_filenames_raw = os.listdir(electricity_households_data_folder_path)
@@ -418,6 +418,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         intermediate_reward = scaled_remaining_entropy
         reward = intermediate_reward
+        self._episode_choices_for_log.append(f"H{current_household_id}-S{current_section_number}:{selected_encryption_ratio:.2f}")
 
         # Advance to next section.
         self._current_section_idx_in_household += 1
@@ -777,7 +778,7 @@ def main():
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
-    model.learn(total_timesteps=600000,callback=callback)
+    model.learn(total_timesteps=60000, callback=callback)
     model.save("DQN_Encryption_Ratio_Selector_V2")
 
     end_time_train = time.time()
@@ -787,63 +788,63 @@ def main():
 
     del model
 
-    # # ----- VALIDATION PHASE ------
-    # print("\n----- VALIDATION PHASE ------")
-    # start_time_val = time.time()
-    #
-    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    # env_val = EncryptionSelectorEnv(dataset_type="validation")
-    # env_val.reset()
-    # model.set_env(env_val)
-    #
-    # mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
-    # print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
-    #
-    # end_time_val = time.time()
-    # print(f"Validation finished at: {time.ctime(end_time_val)}")
-    # elapsed_time_val = end_time_val - start_time_val
-    # print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
-    #
-    # # ----- TESTING PHASE (Combined) ------
-    # print("\n----- TESTING PHASE (Combined) ------")
-    # start_time_combined = time.time()
-    #
-    # model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
-    # env_test_combined = EncryptionSelectorEnv(dataset_type="test")
-    # model.set_env(env_test_combined)
-    #
-    # combined_test_callback = SectionLoggingCallback(
-    #     current_dataset_type="test_combined",
-    #     log_path_global_train=None,
-    #     log_path_global_test_ph=None,
-    #     log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
-    #     verbose=0
-    # )
-    # combined_test_callback.init_callback(model)
-    # combined_test_callback._on_training_start()
-    #
-    # obs, info = env_test_combined.reset()
-    # done = False
-    # episode_reward = 0
-    # while not done:
-    #     action, _states = model.predict(obs, deterministic=True)
-    #     obs, reward, terminated, truncated, info = env_test_combined.step(action)
-    #     done = terminated or truncated
-    #     episode_reward += reward
-    #
-    #     if done:
-    #         info['testing_households_in_run'] = env_test_combined._testing_households
-    #
-    #     combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
-    #     combined_test_callback._on_step()
-    #
-    # print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
-    # combined_test_callback._on_training_end()
-    #
-    # end_time_combined = time.time()
-    # print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
-    # elapsed_time_combined = end_time_combined - start_time_combined
-    # print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
+    # ----- VALIDATION PHASE ------
+    print("\n----- VALIDATION PHASE ------")
+    start_time_val = time.time()
+
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    env_val = EncryptionSelectorEnv(dataset_type="validation")
+    env_val.reset()
+    model.set_env(env_val)
+
+    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
+
+    end_time_val = time.time()
+    print(f"Validation finished at: {time.ctime(end_time_val)}")
+    elapsed_time_val = end_time_val - start_time_val
+    print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
+
+    # ----- TESTING PHASE (Combined) ------
+    print("\n----- TESTING PHASE (Combined) ------")
+    start_time_combined = time.time()
+
+    model = DQN.load("DQN_Encryption_Ratio_Selector_V2")
+    env_test_combined = EncryptionSelectorEnv(dataset_type="test")
+    model.set_env(env_test_combined)
+
+    combined_test_callback = SectionLoggingCallback(
+        current_dataset_type="test_combined",
+        log_path_global_train=None,
+        log_path_global_test_ph=None,
+        log_path_global_test_combined=os.path.join(os.getcwd(), 'V2_testing_log_combined.csv'),
+        verbose=0
+    )
+    combined_test_callback.init_callback(model)
+    combined_test_callback._on_training_start()
+
+    obs, info = env_test_combined.reset()
+    done = False
+    episode_reward = 0
+    while not done:
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = env_test_combined.step(action)
+        done = terminated or truncated
+        episode_reward += reward
+
+        if done:
+            info['testing_households_in_run'] = env_test_combined._testing_households
+
+        combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
+        combined_test_callback._on_step()
+
+    print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
+    combined_test_callback._on_training_end()
+
+    end_time_combined = time.time()
+    print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
+    elapsed_time_combined = end_time_combined - start_time_combined
+    print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
 
     # # ----- TESTING PHASE (Per-Household) ------
     # print("\n----- TESTING PHASE (Per-Household) ------")
