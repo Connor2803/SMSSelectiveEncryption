@@ -64,7 +64,7 @@ type Section struct {
 	plainSum                 float64      // The sum of the plaintext individual electricity meter readings in the section.
 } // Section holds data for a single block of electricity meter readings of a household.
 
-const MAXPARTYROWS = 10240                         // Maximum number of electricity meter readings to be included in the experiment from the original dataset.
+const MAXPARTYROWS = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
 const MAXSECTIONNUMBER = 10                        /// Maximum number of sections to be included in a household (each section will contain MAXPARTYROWS / SECTIONSIZE reading entries).
 const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
 var maxReidentificationAttempts = 100              // Default value for number of loops for runReidentificationAttack.

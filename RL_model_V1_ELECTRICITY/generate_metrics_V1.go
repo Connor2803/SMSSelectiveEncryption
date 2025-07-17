@@ -84,7 +84,7 @@ type ResultKey struct {
 const DATASET_WATER = 1
 const DATASET_ELECTRICITY = 2
 
-const MAX_PARTY_ROWS = 10240 // Total records/meter readings per household (WATER dataset lowest num: 20485)
+const MAX_PARTY_ROWS = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
 const sectionSize = 1024     // Block Size: 2048 for summation correctness, 8192 for variance correctness
 
 var currentDataset int // Water(1), Electricity(2)
