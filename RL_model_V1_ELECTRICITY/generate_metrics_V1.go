@@ -1,6 +1,6 @@
 /*
 running command: // dataset
-go run .\RL_model_V1_WATER\generate_metrics_V1.go 2
+go run .\RL_model_V1_ELECTRICITY\generate_metrics_V1.go 2
 > Run this code for the electricity dataset.
 */
 
