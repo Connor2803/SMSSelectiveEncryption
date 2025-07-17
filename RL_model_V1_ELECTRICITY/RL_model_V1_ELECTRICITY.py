@@ -1,6 +1,5 @@
 # python ./RL_model_V1_ELECTRICITY/RL_model_V!_ELECTRICITY.py
 import os
-from tarfile import data_filter
 import gymnasium as gym
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
