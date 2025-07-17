@@ -165,32 +165,44 @@ class EncryptionSelectorEnv(gym.Env):
         # Read the inputs CSV file generated from Electricity dataset.
         self._df = pd.read_csv("./inputs_V2_ELECTRICITY.csv", header=0)
 
-        # Retrieve the unique household IDs from the Electricity dataset.
-        unique_household_IDs = self._df["Household ID"].unique()
+        # Retrieve the unique household IDs from the Water dataset.
+        electricity_households_data_folder_path = '../examples/datasets/electricity/households_10240'
+        try:
+            folder_filenames_raw = os.listdir(electricity_households_data_folder_path)
+            folder_filenames_sorted = sorted(folder_filenames_raw)  # Sorted alphabetically.
+        except FileNotFoundError:
+            print(f"Error: Folder not found at {electricity_households_data_folder_path}. Please check the path.")
+            folder_filenames_sorted = []
+
+        unique_household_IDs_from_df = self._df["Household ID"].unique()
+        ordered_unique_household_IDs = [
+            filename for filename in folder_filenames_sorted if filename in unique_household_IDs_from_df
+        ]
+        unique_household_IDs = ordered_unique_household_IDs
+
+        # Create permanent testing household subset for comparative performance analysis.
+        permanent_testing_household_IDs = unique_household_IDs[-10:]
+        unique_household_IDs = unique_household_IDs[:-10]
 
         # Convert string representation of list to actual list of floats.
         self._df["All Utility Readings in Section"] = self._df["All Utility Readings in Section"].apply(
             lambda x: json.loads(x))
 
         # Split the dataset into training, validation, and testing household IDs based on the household IDs.
-        training_households_array, validation_and_testing_households_array = train_test_split(unique_household_IDs,
-                                                                                              test_size=0.25,
-                                                                                              random_state=42,
-                                                                                              shuffle=True)
-        validation_households_array, testing_households_array = train_test_split(
-            validation_and_testing_households_array, test_size=0.5,
-            random_state=42, shuffle=True)
+        training_households_array, validation_households_array = train_test_split(unique_household_IDs,
+                                                                                  test_size=(10 / 70),
+                                                                                  random_state=42,
+                                                                                  shuffle=True)
 
-        training_households = training_households_array.tolist()
-        validation_households = validation_households_array.tolist()
-        testing_households = testing_households_array.tolist()
+        training_households = training_households_array
+        validation_households = validation_households_array
 
         self._active_households = None  # This will store the list of households for the current phase.
 
         # Populate training, validation, and testing dataframes based on the split household IDs.
         training_df = self._df[self._df["Household ID"].isin(training_households)]
         validation_df = self._df[self._df["Household ID"].isin(validation_households)]
-        testing_df = self._df[self._df["Household ID"].isin(testing_households)]
+        testing_df = self._df[self._df["Household ID"].isin(permanent_testing_household_IDs)]
 
         # Assign dataframes and household IDs as instance attributes.
         self._all_households = self._df["Household ID"]
@@ -199,7 +211,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._testing_df = testing_df
         self._training_households = training_households
         self._validation_households = validation_households
-        self._testing_households = testing_households
+        self._testing_households = permanent_testing_household_IDs
 
         if dataset_type == 'train':
             self._active_households = self._training_households
@@ -215,6 +227,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._current_section_idx_in_household = 0
         self._current_household_data = None
         self._household_ids_processed_in_phase = []
+        self._episode_choices_for_log = []
 
         print(f"DEBUG: __init__ - Number of active households: {len(self._active_households)}")
 
@@ -430,6 +443,7 @@ class EncryptionSelectorEnv(gym.Env):
         # print(f"DEBUG: 'terminated' flag value before conditional block: {terminated}")
 
         if terminated:
+            info["chosen_encryption_ratios"] = self._episode_choices_for_log
             try:
                 # 1. Prepare data for Go program
                 data_for_go = [
@@ -569,6 +583,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._current_household_idx = 0
         self._current_section_idx_in_household = 0
         self._household_ids_processed_in_phase = []
+        self._episode_choices_for_log = []
         self._chosen_encryption_ratios = {}
         self._go_metrics = None
         self._all_party_metrics = None
@@ -630,6 +645,7 @@ class SectionLoggingCallback(BaseCallback):
 
         log_headers = ["Episode",
                        "Processed Household(s)",
+                       "Chosen Encryption Ratios",
                        "Reidentification Rate",
                        "Reidentification Duration (NS)",
                        "Memory Consumption (MiB)",
@@ -703,7 +719,24 @@ class SectionLoggingCallback(BaseCallback):
                     households_to_log = info.get('terminated_household_id')
 
             if writer and global_info:
-                writer.writerow([self.episode_num, households_to_log] + list(global_info.values()))
+                chosen_ratios = info.get("chosen_encryption_ratios", "N/A")
+
+                metrics_values = [
+                    global_info.get("global_reidentification_rate", 0),
+                    global_info.get("global_reidentification_duration", 0),
+                    global_info.get("global_memory_consumption", 0),
+                    global_info.get("global_summation_error", 0),
+                    global_info.get("global_deviation_error", 0),
+                    global_info.get("global_encryption_time", 0),
+                    global_info.get("global_decryption_time", 0),
+                    global_info.get("global_summation_operations_time", 0),
+                    global_info.get("global_deviation_operations_time", 0)
+                ]
+
+                if self.current_dataset_type == 'train':
+                    writer.writerow([self.episode_num, households_to_log, "N/A"] + metrics_values)
+                else:
+                    writer.writerow([self.episode_num, households_to_log, chosen_ratios] + metrics_values)
             elif writer:
                 print(
                     f"WARNING: Global metrics not found for {self.current_dataset_type} episode {self.episode_num}. Skipping log.")

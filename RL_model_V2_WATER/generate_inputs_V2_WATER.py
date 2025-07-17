@@ -19,7 +19,8 @@ def main():
         return
 
     for file_path in csv_files:
-        household_id = os.path.splitext(os.path.basename(file_path))[0]
+        # household_id = os.path.splitext(os.path.basename(file_path))[0]
+        household_id = os.path.basename(file_path)
 
         utility_readings_current_file = []
         utility_reading_dates_current_file = []

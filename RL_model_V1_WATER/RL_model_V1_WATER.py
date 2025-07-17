@@ -48,7 +48,7 @@ class EncryptionSelectorEnv(gym.Env):
         training_households, validation_households = train_test_split(unique_household_IDs, test_size=(10/70),
                                                                                   random_state=42, shuffle=True)
 
-        self._active_households = None  # This will store the list of households for the current phase
+        self._active_households = None  # This will store the list of households for the current phase.
 
         # Populate training, validation, and testing dataframes based on the split household IDs.
         training_df = df[df["filename"].isin(training_households)]
@@ -73,6 +73,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._testing_households = permanent_testing_IDs
 
         self._active_households = None  # This will store the list of households for the current phase.
+        self.dataset_type = dataset_type
 
         if dataset_type == 'train':
             self._active_households = self._training_households
@@ -146,15 +147,19 @@ class EncryptionSelectorEnv(gym.Env):
         # We have 9 discrete actions, corresponding to the 9 encryption ratios.
         self.action_space = gym.spaces.Discrete(9)
 
+        self._current_household_ID = None
+
     # _get_observation() function provides the current state of the environment the agent is interacting with, i.e., independent of an encryption ratio.
     def _get_observation(self):
+        if self._current_household_ID is None:
+            return {
+                "household_water_usage_summation": np.zeros(1, dtype=np.float64),
+                "household_raw_entropy": np.zeros(1, dtype=np.float64)
+            }
 
         household_data = self._df[self._df["filename"] == self._current_household_ID]
-
         unique_sections_data = household_data.drop_duplicates(subset=["section"])
-
         sum_usage_for_current_household = unique_sections_data["section_sum_usage"].sum()
-
         sum_raw_entropy_for_current_household = unique_sections_data["section_raw_entropy"].sum()
 
         return {
@@ -252,10 +257,20 @@ class EncryptionSelectorEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self._current_household_ID = random.choice(
-            self._active_households)  # NOTE: Will re-vist already seen households for training.
+        if self.dataset_type == 'train':
+            self._current_household_ID = random.choice(self._active_households)
+        elif self._current_household_ID is None:
+            self._current_household_ID = self._active_households[0]
 
         return self._get_observation(), self._get_info()
+
+    def _set_household(self, household_id):
+        """
+        Manually sets the current household ID for the environment.
+        Used for sequential evaluation during testing/validation.
+        """
+        self._current_household_ID = household_id
+        return self._get_observation()
 
     def render(self):
         pass
@@ -422,7 +437,7 @@ def main():
     env_val.reset()
     model.set_env(env_val)
 
-    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
+    mean_reward, std_reward = evaluate_policy(model, env_val, n_eval_episodes=len(env_val._active_households), render=False)
     print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
 
     # num_validation_households = len(env_val._active_households)
@@ -448,25 +463,23 @@ def main():
     # ----- TESTING PHASE ------
     print("\n--- Starting Testing ---")
     env_test = EncryptionSelectorEnv(dataset_type="test")
-    num_testing_households = len(env_test._active_households)
+    testing_households = env_test._active_households.copy()
 
     with open('V1_testing_log_WATER.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(log_headers)
 
         obs, info = env_test.reset()
-        for i in range(num_testing_households):
+        for i, household_id in enumerate(testing_households):
+            obs = env_test._set_household(household_id)
+
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info_step = env_test.step(action)
 
-            household_id = info_step.get('household_id')
             print(
                 f"Tested Household: {household_id}, Chosen Ratio: {info_step.get('selected_encryption_ratio')}, Reward: {reward:.4f}")
 
             log_to_csv(writer, i + 1, household_id, reward, info_step)
-
-            if terminated or truncated:
-                obs, info = env_test.reset()
 
 if __name__ == "__main__":
     main()

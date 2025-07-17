@@ -97,8 +97,8 @@ func main() {
 	// 2. Read the RL agent's choices from the JSON file
 	choices, err := readRLChoices(rlChoicesPath)
 	check(err)
-	if len(choices) == 100 {
-		maxReidentificationAttempts = 30 // As validation and testing dataset much smaller.
+	if len(choices) < 110 {
+		maxReidentificationAttempts = 20 // As validation and testing dataset much smaller.
 	}
 
 	// 3. Load raw data from the master inputs.csv file
