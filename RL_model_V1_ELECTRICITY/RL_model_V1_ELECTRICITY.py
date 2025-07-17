@@ -27,11 +27,13 @@ class EncryptionSelectorEnv(gym.Env):
         # Retrieve the unique household IDs from the Electricity dataset.
         unique_household_IDs = df["filename"].unique()
 
+        # Create permanent testing household subset for comparative performance analysis.
+        permanent_testing_IDs = unique_household_IDs[-10:]
+        unique_household_IDs = unique_household_IDs[:-10]
+
         # Split the dataset into training, validation, and testing household IDs based on the unique household IDs to keep each household data intact.
-        training_households, validation_and_testing_households = train_test_split(unique_household_IDs, test_size=0.25,
-                                                                                  random_state=42, shuffle=True)
-        validation_households, testing_households = train_test_split(validation_and_testing_households, test_size=0.5,
-                                                                     random_state=42, shuffle=True)
+        training_households, validation_households = train_test_split(unique_household_IDs, test_size=(10/70),
+                                                                      random_state=42, shuffle=True)
 
         self._active_households = None  # This will store the list of households for the current phase
 
@@ -40,8 +42,8 @@ class EncryptionSelectorEnv(gym.Env):
         training_df_HE = df_HE[df_HE["filename"].isin(training_households)]
         validation_df = df[df["filename"].isin(validation_households)]
         validation_df_HE = df_HE[df_HE["filename"].isin(validation_households)]
-        testing_df = df[df["filename"].isin(testing_households)]
-        testing_df_HE = df_HE[df_HE["filename"].isin(testing_households)]
+        testing_df = df[df["filename"].isin(permanent_testing_IDs)]
+        testing_df_HE = df_HE[df_HE["filename"].isin(permanent_testing_IDs)]
 
         # Assign dataframes and household IDs as instance attributes.
         self._df = df
@@ -55,7 +57,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._testing_df_HE = testing_df_HE
         self._training_households = training_households
         self._validation_households = validation_households
-        self._testing_households = testing_households
+        self._testing_households = permanent_testing_IDs
 
         self._active_households = None  # This will store the list of households for the current phase.
 
