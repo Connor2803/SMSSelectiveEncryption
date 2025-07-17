@@ -420,7 +420,7 @@ class EncryptionSelectorEnv(gym.Env):
         reward = intermediate_reward
         self._episode_choices_for_log.append(f"H{current_household_id}-S{current_section_number}:{selected_encryption_ratio:.2f}")
 
-        # Advance to next section.
+        # Advance to the next section.
         self._current_section_idx_in_household += 1
         terminated = False
         truncated = False
@@ -446,7 +446,7 @@ class EncryptionSelectorEnv(gym.Env):
         if terminated:
             info["chosen_encryption_ratios"] = self._episode_choices_for_log
             try:
-                # 1. Prepare data for Go program
+                # 1. Prepare data for the Go program.
                 data_for_go = [
                     {
                         "household_id": str(k[0]),
@@ -458,7 +458,7 @@ class EncryptionSelectorEnv(gym.Env):
                     }
                     for k, v in self._chosen_encryption_ratios.items()
                 ]
-                data_for_go_filepath = "RL_V2_choices.json"
+                data_for_go_filepath = "./RL_model_V2_ELECTRCITY/RL_V2_choices.json"
 
                 print(f"\nDEBUG: Data for Go program (first entry, total {len(data_for_go)}):")
                 for i, entry in enumerate(data_for_go[:1]):
@@ -473,7 +473,7 @@ class EncryptionSelectorEnv(gym.Env):
                 print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                        ["./generate_metrics_v2", data_for_go_filepath],
+                        ["./RL_model_V2_ELECTRICITY/generate_metrics_v2", data_for_go_filepath],
                         capture_output=True,
                         text=True,
                         check=True,

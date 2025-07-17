@@ -457,7 +457,7 @@ class EncryptionSelectorEnv(gym.Env):
                     }
                     for k, v in self._chosen_encryption_ratios.items()
                 ]
-                data_for_go_filepath = "RL_V2_choices.json"
+                data_for_go_filepath = "./RL_model_V2_WATER/RL_V2_choices.json"
 
                 print(f"\nDEBUG: Data for Go program (first entry, total {len(data_for_go)}):")
                 for i, entry in enumerate(data_for_go[:1]):
@@ -472,7 +472,7 @@ class EncryptionSelectorEnv(gym.Env):
                 print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                        ["./generate_metrics_v2", data_for_go_filepath],
+                        ["./RL_model_V2_WATER/generate_metrics_v2", data_for_go_filepath],
                         capture_output=True,
                         text=True,
                         check=True,
