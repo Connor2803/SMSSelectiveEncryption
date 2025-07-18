@@ -230,7 +230,7 @@ class EncryptionSelectorEnv(gym.Env):
         else:
             raise ValueError("dataset_type must be 'train', 'validation', or 'test'")
 
-        # Internal state to keep track of current household and section.
+        # Internal state to keep track of the current household and section.
         self._current_household_idx = 0
         self._current_section_idx_in_household = 0
         self._current_household_data = None
@@ -428,7 +428,7 @@ class EncryptionSelectorEnv(gym.Env):
         reward = intermediate_reward
         self._episode_choices_for_log.append(f"H{current_household_id}-S{current_section_number}:{selected_encryption_ratio:.2f}")
 
-        # Advance to next section.
+        # Advance to the next section.
         self._current_section_idx_in_household += 1
         terminated = False
         truncated = False
@@ -440,10 +440,13 @@ class EncryptionSelectorEnv(gym.Env):
             print(f"DEBUG: Step - Loaded data for new household: {next_household_id}")
             print(f"DEBUG: Step - Number of sections in new household data: {len(self._current_household_data)}")
 
-        # Check if all sections in current household are processed.
+        # Check if all sections in the current household are processed.
         if self._current_section_idx_in_household >= len(self._current_household_data):
             self._current_household_idx += 1  # Move to the next household.
             self._current_section_idx_in_household = 0  # Reset section index.
+
+            # current_household_id = self._active_households[self._current_household_idx]
+            # print(f"DEBUG: Reset - Loaded data for household: {current_household_id}")
 
             if self._current_household_idx >= len(self._active_households):
                 terminated = True  # All households in this phase are processed.
@@ -475,17 +478,17 @@ class EncryptionSelectorEnv(gym.Env):
 
                 with open(data_for_go_filepath, "w") as f:
                     json.dump(data_for_go, f)
-                print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
+                # print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
 
                 # 2. Run the Go program as a subprocess.
-                print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
+                # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
                         [GO_EXECUTABLE_PATH, data_for_go_filepath],
                         capture_output=True,
                         text=True,
                         check=True,
-                        timeout = 180 # seconds
+                        timeout = 120 # seconds
                 )
 
                 # print(f"Go Program stdout: {go_result.stdout}")
@@ -587,7 +590,7 @@ class EncryptionSelectorEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        print("DEBUG: Environment reset called.")
+        # print("DEBUG: Environment reset called.")
 
         self._current_household_idx = 0
         self._current_section_idx_in_household = 0
@@ -600,10 +603,6 @@ class EncryptionSelectorEnv(gym.Env):
         current_household_id = self._active_households[self._current_household_idx]
         self._current_household_data = self._df[
             self._df["Household ID"] == current_household_id].sort_values(by="Section Number")
-
-        print(f"DEBUG: Reset - Loaded data for household: {current_household_id}")
-        print(f"DEBUG: Reset - Number of sections in current household data: {len(self._current_household_data)}")
-        print(f"DEBUG: Reset - Total active households: {len(self._active_households)}")
 
         observation = self._get_observation()
         info = self._get_intermediate_info()

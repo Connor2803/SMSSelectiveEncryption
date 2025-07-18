@@ -446,6 +446,11 @@ class EncryptionSelectorEnv(gym.Env):
             self._current_household_idx += 1  # Move to the next household.
             self._current_section_idx_in_household = 0  # Reset section index.
 
+            # current_household_id = self._active_households[self._current_household_idx]
+            # print(f"DEBUG: Reset - Loaded data for household: {current_household_id}")
+            # print(f"DEBUG: Reset - Number of sections in current household data: {len(self._current_household_data)}")
+            # print(f"DEBUG: Reset - Total active households: {len(self._active_households)}")
+
             if self._current_household_idx >= len(self._active_households):
                 terminated = True  # All households in this phase are processed.
                 self._household_ids_processed_in_phase.extend(self._active_households)
@@ -476,17 +481,17 @@ class EncryptionSelectorEnv(gym.Env):
 
                 with open(data_for_go_filepath, "w") as f:
                     json.dump(data_for_go, f)
-                print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
+                # print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
 
                 # 2. Run the Go program as a subprocess.
-                print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
+                # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
                         [GO_EXECUTABLE_PATH, data_for_go_filepath],
                         capture_output=True,
                         text=True,
                         check=True,
-                        timeout = 180 # seconds
+                        timeout = 120 # seconds
                 )
 
                 # print(f"Go Program stdout: {go_result.stdout}")
@@ -601,10 +606,6 @@ class EncryptionSelectorEnv(gym.Env):
         current_household_id = self._active_households[self._current_household_idx]
         self._current_household_data = self._df[
             self._df["Household ID"] == current_household_id].sort_values(by="Section Number")
-
-        print(f"DEBUG: Reset - Loaded data for household: {current_household_id}")
-        print(f"DEBUG: Reset - Number of sections in current household data: {len(self._current_household_data)}")
-        print(f"DEBUG: Reset - Total active households: {len(self._active_households)}")
 
         observation = self._get_observation()
         info = self._get_intermediate_info()
