@@ -56,7 +56,7 @@ for curr_run in range(number_of_runs):
                 "Encryption Time": curr_electricity_household_data["Encryption Time"].values[0]
             }
             electricity_v1_run_data[electricity_household_id].append(data_point)
-            print(f"DEBUG: Added data point for household {electricity_v1_run_data[electricity_household_id]}")
+            # print(f"DEBUG: Added data point for household {electricity_v1_run_data[electricity_household_id]}")
 
 # MODEL V1 ELECTRICITY DATA TRANSFORMATION
 electricity_v1_per_household_analysis = {}
@@ -69,16 +69,30 @@ for household_id, runs in electricity_v1_run_data.items():
         avg_deviation_error = statistics.mean([r["Deviation Error"] for r in runs])
         avg_encryption_time = statistics.mean([r["Encryption Time"] for r in runs])
 
+        std_encryption_ratio = statistics.stdev([r["Selected Encryption Ratio"] for r in runs])
+        std_ciphertext_uniqueness = statistics.stdev([r["Ciphertext Uniqueness"] for r in runs])
+        std_memory_consumption = statistics.stdev((r["Memory Consumption"] for r in runs))
+        std_summation_error = statistics.stdev((r["Summation Error"] for r in runs))
+        std_deviation_error = statistics.stdev(((r["Deviation Error"] for r in runs)))
+        std_encryption_time = statistics.stdev((r["Encryption Time"] for r in runs))
+
         electricity_v1_per_household_analysis[household_id] = {
             "Average Encryption Ratio": avg_encryption_ratio,
             "Average Ciphertext Uniqueness": avg_ciphertext_uniqueness,
             "Average Memory Consumption": avg_memory_consumption,
             "Average Summation Error": avg_summation_error,
             "Average Deviation Error": avg_deviation_error,
-            "Average Encryption Time": avg_encryption_time
+            "Average Encryption Time": avg_encryption_time,
+
+            "Standard Deviation Encryption Ratio": std_encryption_ratio,
+            "Standard Deviation Ciphertext Uniqueness": std_ciphertext_uniqueness,
+            "Standard Deviation Memory Consumption": std_memory_consumption,
+            "Standard Deviation Summation Error": std_summation_error,
+            "Standard Deviation Deviation Error": std_deviation_error,
+            "Standard Deviation Encryption Time": std_encryption_time,
         }
 
-        print(f"DEBUG: Analysis for household {household_id}: {electricity_v1_per_household_analysis[household_id]}")
+        # print(f"DEBUG: Analysis for household {household_id}: {electricity_v1_per_household_analysis[household_id]}")
 
 # MODEL V2 ELECTRICITY DATA GATHERING
 electricity_v2_run_data = {hh: [] for hh in electricity_test_households}
@@ -144,6 +158,13 @@ for household_id, runs in electricity_v2_run_data.items():
         avg_deviation_error = statistics.mean([r["Deviation Error"] for r in runs])
         avg_encryption_time = statistics.mean([r["Encryption Time"] for r in runs])
 
+        std_encryption_ratio = statistics.stdev([r["Selected Encryption Ratio"] for r in runs])
+        std_reidentification_mean = statistics.stdev([r["Reidentification Mean"] for r in runs])
+        std_memory_consumption = statistics.stdev((r["Memory Consumption"] for r in runs))
+        std_summation_error = statistics.stdev((r["Summation Error"] for r in runs))
+        std_deviation_error = statistics.stdev(((r["Deviation Error"] for r in runs)))
+        std_encryption_time = statistics.stdev((r["Encryption Time"] for r in runs))
+
         electricity_v2_per_household_analysis[household_id] = {
             "Average Encryption Ratio": avg_encryption_ratio,
             "Average Reidentification Rate": avg_reidentification_mean,
@@ -151,6 +172,13 @@ for household_id, runs in electricity_v2_run_data.items():
             "Average Summation Error": avg_summation_error,
             "Average Deviation Error": avg_deviation_error,
             "Average Encryption Time": avg_encryption_time,
+
+            "Standard Deviation Encryption Ratio": std_encryption_ratio,
+            "Standard Deviation Reidentification Rate": std_reidentification_mean,
+            "Standard Deviation Memory Consumption": std_memory_consumption,
+            "Standard Deviation Summation Error": std_summation_error,
+            "Standard Deviation Deviation Error": std_deviation_error,
+            "Standard Deviation Encryption Time": std_encryption_time,
         }
         # print(f"DEBUG: Analysis for household {household_id}: {electricity_v2_per_household_analysis[household_id]}")
 
@@ -217,16 +245,30 @@ for household_id, runs in water_v1_run_data.items():
         avg_deviation_error = statistics.mean([r["Deviation Error"] for r in runs])
         avg_encryption_time = statistics.mean([r["Encryption Time"] for r in runs])
 
+        std_encryption_ratio = statistics.stdev([r["Selected Encryption Ratio"] for r in runs])
+        std_ciphertext_uniqueness = statistics.stdev([r["Ciphertext Uniqueness"] for r in runs])
+        std_memory_consumption = statistics.stdev((r["Memory Consumption"] for r in runs))
+        std_summation_error = statistics.stdev((r["Summation Error"] for r in runs))
+        std_deviation_error = statistics.stdev(((r["Deviation Error"] for r in runs)))
+        std_encryption_time = statistics.stdev((r["Encryption Time"] for r in runs))
+
         water_v1_per_household_analysis[household_id] = {
             "Average Encryption Ratio": avg_encryption_ratio,
             "Average Ciphertext Uniqueness": avg_ciphertext_uniqueness,
             "Average Memory Consumption": avg_memory_consumption,
             "Average Summation Error": avg_summation_error,
             "Average Deviation Error": avg_deviation_error,
-            "Average Encryption Time": avg_encryption_time
+            "Average Encryption Time": avg_encryption_time,
+
+            "Standard Deviation Encryption Ratio": std_encryption_ratio,
+            "Standard Deviation Ciphertext Uniqueness": std_ciphertext_uniqueness,
+            "Standard Deviation Memory Consumption": std_memory_consumption,
+            "Standard Deviation Summation Error": std_summation_error,
+            "Standard Deviation Deviation Error": std_deviation_error,
+            "Standard Deviation Encryption Time": std_encryption_time,
         }
 
-        print(f"DEBUG: Analysis for household {household_id}: {water_v1_per_household_analysis[household_id]}")
+        # print(f"DEBUG: Analysis for household {household_id}: {water_v1_per_household_analysis[household_id]}")
 
 # MODEL V2 WATER DATA GATHERING
 water_v2_run_data = {hh: [] for hh in water_test_households}
@@ -293,8 +335,12 @@ for household_id, runs in water_v2_run_data.items():
         avg_deviation_error = statistics.mean([r["Deviation Error"] for r in runs])
         avg_encryption_time = statistics.mean([r["Encryption Time"] for r in runs])
 
-        # std_encryption_ratio = statistics.stdev([r["Selected Encryption Ratio"] for r in runs])
-        # std_reidentification_mean = statistics.stdev([r["Reidentification Mean"] for r in runs])
+        std_encryption_ratio = statistics.stdev([r["Selected Encryption Ratio"] for r in runs])
+        std_reidentification_mean = statistics.stdev([r["Reidentification Mean"] for r in runs])
+        std_memory_consumption = statistics.stdev((r["Memory Consumption"] for r in runs))
+        std_summation_error = statistics.stdev((r["Summation Error"] for r in runs))
+        std_deviation_error = statistics.stdev(((r["Deviation Error"] for r in runs)))
+        std_encryption_time = statistics.stdev((r["Encryption Time"] for r in runs))
 
         water_v2_per_household_analysis[household_id] = {
             "Average Encryption Ratio": avg_encryption_ratio,
@@ -303,6 +349,13 @@ for household_id, runs in water_v2_run_data.items():
             "Average Summation Error": avg_summation_error,
             "Average Deviation Error": avg_deviation_error,
             "Average Encryption Time": avg_encryption_time,
+
+            "Standard Deviation Encryption Ratio": std_encryption_ratio,
+            "Standard Deviation Reidentification Rate": std_reidentification_mean,
+            "Standard Deviation Memory Consumption": std_memory_consumption,
+            "Standard Deviation Summation Error": std_summation_error,
+            "Standard Deviation Deviation Error": std_deviation_error,
+            "Standard Deviation Encryption Time": std_encryption_time,
         }
 
 analyses = {
