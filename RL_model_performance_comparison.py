@@ -228,12 +228,14 @@ for household_id, runs in water_v1_run_data.items():
         }
 
 
-electricity_v1_result_df = pd.DataFrame.from_dict(electricity_v1_per_household_analysis, orient="index")
-electricity_v2_result_df = pd.DataFrame.from_dict(electricity_v2_per_household_analysis, orient="index")
-water_v1_result_df = pd.DataFrame.from_dict(water_v1_per_household_analysis, orient="index")
-water_v2_result_df = pd.DataFrame.from_dict(water_v2_per_household_analysis, orient="index")
+analyses = {
+    "electricity_v1": electricity_v1_per_household_analysis,
+    "electricity_v2": electricity_v2_per_household_analysis,
+    "water_v1": water_v1_per_household_analysis,
+    "water_v2": water_v2_per_household_analysis
+}
 
-print(electricity_v1_result_df)
-print(electricity_v2_result_df)
-print(water_v1_result_df)
-print(water_v2_result_df)
+for label, data in analyses.items():
+    df = pd.DataFrame.from_dict(data, orient="index")
+    with open(f"{label}_result.txt", "w") as f:
+        f.write(df.to_string())
