@@ -12,7 +12,17 @@ from sklearn import preprocessing
 import random
 import time
 import csv
+import sys
+import subprocess
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+EXECUTABLE_NAME = "generate_metrics_V1"
+if sys.platform == "win32":
+    EXECUTABLE_NAME += ".exe"
+GO_SOURCE_PATH = os.path.join(SCRIPT_DIR, "generate_metrics_V1.go")
+GO_EXECUTABLE_PATH = os.path.join(SCRIPT_DIR, EXECUTABLE_NAME)
+print(f"\nGo executable path: {GO_EXECUTABLE_PATH}")
+print(f"\nGo source path: {GO_SOURCE_PATH}")
 
 class EncryptionSelectorEnv(gym.Env):
     def __init__(self, dataset_type="train"):
@@ -415,6 +425,14 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
     ])
 
 def main():
+    try:
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to compile Go program: {e}")
+        return
+
+    if not os.path.exists(GO_EXECUTABLE_PATH):
+        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
     # ----- TRAINING PHASE ------
     env_train = EncryptionSelectorEnv(dataset_type="train")
