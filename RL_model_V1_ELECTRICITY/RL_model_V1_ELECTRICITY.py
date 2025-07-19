@@ -242,14 +242,23 @@ class EncryptionSelectorEnv(gym.Env):
             "scaled_decryption_time": scaled_current_decryption_time,
             "scaled_summation_operations_time": scaled_current_summation_operations_time,
             "scaled_deviation_operations_time": scaled_current_deviation_operations_time,
-        }
 
-        w_asr_attack_time = 1.2
+            "raw_asr_attack_duration": current_asr_attack_duration,
+            "raw_asr_mean": current_asr_mean,
+            "raw_remaining_entropy": current_remaining_entropy,
+            "raw_memory": current_memory,
+            "raw_summation_error": current_summation_error,
+            "raw_deviation_error": current_deviation_error,
+            "raw_encryption_time": current_encryption_time,
+            "raw_decryption_time": current_decryption_time,
+            "raw_summation_operations_time": current_summation_operations_time,
+            "raw_deviation_operations_time": current_deviation_operations_time,
+        }
 
         # Positive contribution: asr_attack_duration, decryption_time
         # Negative contribution: scaled_current_asr_mean, scaled_current_remaining_entropy, scaled_current_memory, summation_error, deviation_error, encryption_time, summation_operations_time, deviation_operations_time
 
-        reward = (w_asr_attack_time * scaled_current_asr_attack_duration) + scaled_current_decryption_time - scaled_current_asr_mean - scaled_current_remaining_entropy - scaled_current_memory - scaled_current_summation_error - scaled_current_deviation_error - scaled_current_encryption_time - scaled_current_summation_operations_time - scaled_current_deviation_operations_time
+        reward = scaled_current_asr_attack_duration + scaled_current_decryption_time - scaled_current_asr_mean - scaled_current_remaining_entropy - scaled_current_memory - scaled_current_summation_error - scaled_current_deviation_error - scaled_current_encryption_time - scaled_current_summation_operations_time - scaled_current_deviation_operations_time
 
         terminated = True  # As this is a single-step episode.
         truncated = False  # As this is a single-step episode.
@@ -326,6 +335,17 @@ class CustomCallback(BaseCallback):
                 scaled_summation_operations_time = info.get("scaled_summation_operations_time", 0)
                 scaled_deviation_operations_time = info.get("scaled_deviation_operations_time", 0)
 
+                raw_asr_attack_duration = info.get("raw_asr_attack_duration", 0)
+                raw_asr_mean = info.get("raw_asr_mean", 0)
+                raw_remaining_entropy = info.get("raw_remaining_entropy", 0)
+                raw_memory = info.get("raw_memory", 0)
+                raw_summation_error = info.get("raw_summation_error", 0)
+                raw_deviation_error = info.get("raw_deviation_error", 0)
+                raw_encryption_time = info.get("raw_encryption_time", 0)
+                raw_decryption_time = info.get("raw_decryption_time", 0)
+                raw_summation_operations_time = info.get("raw_summation_operations_time", 0)
+                raw_deviation_operations_time = info.get("raw_deviation_operations_time", 0)
+
                 # Write the row to the CSV file
                 self.csv_writer.writerow([
                     self._episode_num,
@@ -346,6 +366,18 @@ class CustomCallback(BaseCallback):
                     scaled_decryption_time,
                     scaled_summation_operations_time,
                     scaled_deviation_operations_time,
+
+                    # Original values.
+                    raw_asr_attack_duration,
+                    raw_asr_mean,
+                    raw_remaining_entropy,
+                    raw_memory,
+                    raw_summation_error,
+                    raw_deviation_error,
+                    raw_encryption_time,
+                    raw_decryption_time,
+                    raw_summation_operations_time,
+                    raw_deviation_operations_time,
                 ])
                 if self.verbose > 0:
                     print(
@@ -370,6 +402,16 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
         info.get("scaled_decryption_time", 0),
         info.get("scaled_summation_operations_time", 0),
         info.get("scaled_deviation_operations_time", 0),
+        info.get("raw_asr_attack_duration", 0),
+        info.get("raw_asr_mean", 0),
+        info.get("raw_remaining_entropy", 0),
+        info.get("raw_memory", 0),
+        info.get("raw_summation_error", 0),
+        info.get("raw_deviation_error", 0),
+        info.get("raw_encryption_time", 0),
+        info.get("raw_decryption_time", 0),
+        info.get("raw_summation_operations_time", 0),
+        info.get("raw_deviation_operations_time", 0),
     ])
 
 def main():
@@ -390,6 +432,16 @@ def main():
              "HouseholdID",
              "Total Reward",
              "Selected Encryption Ratio",
+             "Scaled Average Attack Duration",
+             "Scaled Average ASR Mean",
+             "Scaled Sum Remaining Entropy",
+             "Scaled Average Memory MiB",
+             "Scaled Summation Error",
+             "Scaled Deviation Error",
+             "Scaled Encryption Time",
+             "Scaled Decryption Time",
+             "Scaled Summation Operations Time",
+             "Scaled Deviation Operations Time",
              "Average Attack Duration",
              "Average ASR Mean",
              "Sum Remaining Entropy",
@@ -423,13 +475,31 @@ def main():
 
     del model
 
-    log_headers = [
-        "Episode", "HouseholdID", "Total Reward", "Selected Encryption Ratio",
-        "Average Attack Duration", "Average ASR Mean", "Sum Remaining Entropy",
-        "Average Memory MiB", "Summation Error", "Deviation Error",
-        "Encryption Time", "Decryption Time", "Summation Operations Time",
-        "Deviation Operations Time"
-    ]
+    log_headers =  ["Episode",
+             "HouseholdID",
+             "Total Reward",
+             "Selected Encryption Ratio",
+             "Scaled Average Attack Duration",
+             "Scaled Average ASR Mean",
+             "Scaled Sum Remaining Entropy",
+             "Scaled Average Memory MiB",
+             "Scaled Summation Error",
+             "Scaled Deviation Error",
+             "Scaled Encryption Time",
+             "Scaled Decryption Time",
+             "Scaled Summation Operations Time",
+             "Scaled Deviation Operations Time",
+             "Average Attack Duration",
+             "Average ASR Mean",
+             "Sum Remaining Entropy",
+             "Average Memory MiB",
+             "Summation Error",
+             "Deviation Error",
+             "Encryption Time",
+             "Decryption Time",
+             "Summation Operations Time",
+             "Deviation Operations Time",
+             ]
 
     # ----- VALIDATION PHASE ------
     print("\n--- Starting Validation ---")

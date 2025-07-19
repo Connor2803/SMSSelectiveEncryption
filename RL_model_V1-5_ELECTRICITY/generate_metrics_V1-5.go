@@ -190,10 +190,10 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 		"encryption_ratio",
 		"section_raw_entropy",
 		"section_remaining_entropy",
-		"asr_mean",
-		"asr_standard_error",
-		"asr_attack_duration",
-		"avg_time_per_attack_run",
+		"reidentification_mean",
+		"reidentification_standard_error",
+		"reidentification_attack_duration",
+		"avg_time_per_reidentification_attack_run",
 		"allocated_memory_MiB",
 	})
 	check(err)
