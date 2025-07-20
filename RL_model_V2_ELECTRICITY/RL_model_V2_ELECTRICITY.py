@@ -556,6 +556,21 @@ class EncryptionSelectorEnv(gym.Env):
 
                 info["terminated_household_id"] = current_household_id
                 info["training_households"] = self._training_households
+                per_household_metrics = {}
+                if self._all_party_metrics:
+                    per_household_metrics["summation_errors"] = [f"H{p['partyID']}:{p['summationError']:.6f}" for p in
+                                                                 self._all_party_metrics.values()]
+                    per_household_metrics["deviation_errors"] = [f"H{p['partyID']}:{p['deviationError']:.6f}" for p in
+                                                                 self._all_party_metrics.values()]
+                    per_household_metrics["encryption_times"] = [f"H{p['partyID']}:{p['encryptionTimeNS']}" for p in
+                                                                 self._all_party_metrics.values()]
+                    per_household_metrics["decryption_times"] = [f"H{p['partyID']}:{p['decryptionTimeNS']}" for p in
+                                                                 self._all_party_metrics.values()]
+                    per_household_metrics["summation_ops_times"] = [f"H{p['partyID']}:{p['summationOpsTimeNS']}" for p
+                                                                    in self._all_party_metrics.values()]
+                    per_household_metrics["deviation_ops_times"] = [f"H{p['partyID']}:{p['deviationOpsTimeNS']}" for p
+                                                                    in self._all_party_metrics.values()]
+                info["per_household_metrics"] = per_household_metrics
 
 
             except subprocess.CalledProcessError as e:
@@ -654,19 +669,35 @@ class SectionLoggingCallback(BaseCallback):
         #     "Intermediate Reward"
         # ]
 
-        log_headers = ["Episode",
-                       "Processed Household(s)",
-                       "Chosen Encryption Ratios",
-                       "Reidentification Rate",
-                       "Reidentification Duration (NS)",
-                       "Memory Consumption (MiB)",
-                       "Summation Error",
-                       "Deviation Error",
-                       "Encryption Time (NS)",
-                       "Decryption Time (NS)",
-                       "Summation Operations Time (NS)",
-                       "Deviation Operations Time (NS)"
-                       ]
+        log_headers_train = [
+            "Episode",
+            "Processed Household(s)",
+            "Chosen Encryption Ratios",
+            "Reidentification Rate",
+            "Reidentification Duration (NS)",
+            "Memory Consumption (MiB)",
+            "Global Summation Error",
+            "Global Deviation Error",
+            "Global Encryption Time (NS)",
+            "Global Decryption Time (NS)",
+            "Global Summation Operations Time (NS)",
+            "Global Deviation Operations Time (NS)"
+        ]
+
+        log_headers_test = [
+            "Episode",
+            "Processed Household(s)",
+            "Chosen Encryption Ratios",
+            "Reidentification Rate",
+            "Reidentification Duration (NS)",
+            "Memory Consumption (MiB)",
+            "Per-Party Summation Errors",
+            "Per-Party Deviation Errors",
+            "Per-Party Encryption Times (NS)",
+            "Per-Party Decryption Times (NS)",
+            "Per-Party Summation Operations Times (NS)",
+            "Per-Party Deviation Operations Times (NS)"
+        ]
 
         # try:
         #     if self.log_path_section:
@@ -678,14 +709,25 @@ class SectionLoggingCallback(BaseCallback):
         #     print(f"ERROR: Failed to open log file or initialize CSV writer: {e}")
         #     raise
 
-        if self.log_path_global_train: self.log_files['train'] = open(self.log_path_global_train, 'w', newline='')
-        if self.log_path_global_test_ph: self.log_files['test_ph'] = open(self.log_path_global_test_ph, 'w', newline='')
-        if self.log_path_global_test_combined: self.log_files['test_combined'] = open(
-            self.log_path_global_test_combined, 'w', newline='')
+        try:
+            if self.log_path_global_train:
+                self.log_files['train'] = open(self.log_path_global_train, 'w', newline='')
+                self.writers['train'] = csv.writer(self.log_files['train'])
+                self.writers['train'].writerow(log_headers_train)
 
-        for name, file in self.log_files.items():
-            self.writers[name] = csv.writer(file)
-            self.writers[name].writerow(log_headers)
+            if self.log_path_global_test_ph:
+                self.log_files['test_ph'] = open(self.log_path_global_test_ph, 'w', newline='')
+                self.writers['test_ph'] = csv.writer(self.log_files['test_ph'])
+                self.writers['test_ph'].writerow(log_headers_test)
+
+            if self.log_path_global_test_combined:
+                self.log_files['test_combined'] = open(self.log_path_global_test_combined, 'w', newline='')
+                self.writers['test_combined'] = csv.writer(self.log_files['test_combined'])
+                self.writers['test_combined'].writerow(log_headers_test)
+
+        except Exception as e:
+            print(f"ERROR: Failed to open log file or initialize CSV writer: {e}")
+            raise
 
     def _on_step(self) -> bool:
         """
@@ -714,40 +756,61 @@ class SectionLoggingCallback(BaseCallback):
             self.episode_num += 1
             info = self.locals['infos'][0]
             global_info = info.get('global_metrics')
+            per_household_info = info.get('per_household_metrics', {})
 
             writer = None
             households_to_log = "N/A"
+            log_type = self.current_dataset_type
 
-            if self.current_dataset_type == 'train':
+            if log_type == 'train':
                 writer = self.writers.get('train')
                 households_to_log = info.get('training_households')
-            elif self.current_dataset_type == 'test_combined':
+
+            elif log_type == 'test_combined':
                 if info.get('testing_households_in_run'):
                     writer = self.writers.get('test_combined')
                     households_to_log = info.get('testing_households_in_run')
-            elif self.current_dataset_type == 'test_ph':
-                    writer = self.writers.get('test_ph')
-                    households_to_log = info.get('terminated_household_id')
+
+            elif log_type == 'test_ph':
+                writer = self.writers.get('test_ph')
+                households_to_log = info.get('terminated_household_id')
 
             if writer and global_info:
                 chosen_ratios = info.get("chosen_encryption_ratios", "N/A")
 
-                metrics_values = [
-                    global_info.get("global_reidentification_rate", 0),
-                    global_info.get("global_reidentification_duration", 0),
-                    global_info.get("global_memory_consumption", 0),
-                    global_info.get("global_summation_error", 0),
-                    global_info.get("global_deviation_error", 0),
-                    global_info.get("global_encryption_time", 0),
-                    global_info.get("global_decryption_time", 0),
-                    global_info.get("global_summation_operations_time", 0),
-                    global_info.get("global_deviation_operations_time", 0)
-                ]
-
-                if self.current_dataset_type == 'train':
+                if log_type == 'train':
+                    metrics_values = [
+                        global_info.get("global_reidentification_rate", 0),
+                        global_info.get("global_reidentification_duration", 0),
+                        global_info.get("global_memory_consumption", 0),
+                        global_info.get("global_summation_error", 0),
+                        global_info.get("global_deviation_error", 0),
+                        global_info.get("global_encryption_time", 0),
+                        global_info.get("global_decryption_time", 0),
+                        global_info.get("global_summation_operations_time", 0),
+                        global_info.get("global_deviation_operations_time", 0)
+                    ]
                     writer.writerow([self.episode_num, households_to_log, "N/A"] + metrics_values)
-                else:
-                    writer.writerow([self.episode_num, households_to_log, chosen_ratios] + metrics_values)
+
+                if self.current_dataset_type == 'test_combined':
+                    global_metrics_values = [
+                        global_info.get("global_reidentification_rate", 0),
+                        global_info.get("global_reidentification_duration", 0),
+                        global_info.get("global_memory_consumption", 0),
+                    ]
+
+                    per_party_metrics_str = [
+                        "; ".join(per_household_info.get("summation_errors", [])),
+                        "; ".join(per_household_info.get("deviation_errors", [])),
+                        "; ".join(per_household_info.get("encryption_times", [])),
+                        "; ".join(per_household_info.get("decryption_times", [])),
+                        "; ".join(per_household_info.get("summation_ops_times", [])),
+                        "; ".join(per_household_info.get("deviation_ops_times", [])),
+                    ]
+
+                    writer.writerow([self.episode_num, households_to_log,
+                                     chosen_ratios] + global_metrics_values + per_party_metrics_str)
+
             elif writer:
                 print(
                     f"WARNING: Global metrics not found for {self.current_dataset_type} episode {self.episode_num}. Skipping log.")
@@ -791,7 +854,7 @@ def main():
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
-    model.learn(total_timesteps=60000, callback=callback)
+    model.learn(total_timesteps=6000, callback=callback)
     model.save("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
 
     end_time_train = time.time()

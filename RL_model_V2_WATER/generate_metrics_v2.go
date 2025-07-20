@@ -35,6 +35,7 @@ type GoMetrics struct {
 } // Struct that will be returned from this Go program back to the RL model to calculate the final reward.
 
 type PartyLevelMetrics struct {
+	PartyID            string  `json:"partyID"`
 	SummationError     float64 `json:"summationError"`
 	DeviationError     float64 `json:"deviationError"`
 	EncryptionTimeNS   int64   `json:"encryptionTimeNS"`
@@ -158,6 +159,7 @@ func main() {
 
 	for partyID, partyData := range parties {
 		finalPartyMetrics[partyID] = PartyLevelMetrics{
+			PartyID:            partyID,
 			SummationError:     partyData.summationError,
 			DeviationError:     partyData.deviationError,
 			EncryptionTimeNS:   partyData.encryptionTime.Nanoseconds(),
