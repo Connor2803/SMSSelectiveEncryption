@@ -1,5 +1,5 @@
 # python ./RL_model_performance_comparison.py
-# NOTE: It takes about ~4.5 hours for this code to run on AMD Ryzen 5 55500U processor and 16GB RAM
+# NOTE: It takes about ~4.5 hours for this code to run on an AMD Ryzen 5 55500U processor and 16GB RAM.
 
 import subprocess
 import pandas as pd
@@ -45,7 +45,7 @@ def parse_ratios_string(s: str) -> dict:
         return {}
 
     # Regex to find household ID and ratio value
-    pattern = re.compile(r"H([ef][\w-]+\.csv)-S\d+:(\d+\.\d+)")
+    pattern = re.compile(r"(H(?:[ef][\w-]+|MAC\d+)\.csv)-S\d+:(\d+\.\d+)")
     matches = pattern.findall(s)
     
     for household_id, ratio_str in matches:
@@ -395,7 +395,7 @@ def parse_per_party_string(s: str) -> dict:
 #     df = pd.DataFrame.from_dict(data, orient='index')
 #     with open(f"{label}_result.txt", "w") as f:
 #         f.write(df.to_string())
-# ----------------------------------------------------------------------------------------------------------------------
+# # ----------------------------------------------------------------------------------------------------------------------
 # MODEL ELECTRICITY V2 CODE:
 electricity_v2_all_runs_data = []
 for curr_run in range(number_of_runs):
@@ -478,93 +478,93 @@ if electricity_v2_all_runs_data:
 else:
     electricity_v2_per_household_analysis = pd.DataFrame()
 
-# ----------------------------------------------------------------------------------------------------------------------
-# WATER MODEL V2 CODE:
-water_v2_all_runs_data = []
-for curr_run in range(number_of_runs):
-    print(f"--- Starting Water Model V2, Run {curr_run + 1} ---")
-    try:
-        subprocess.run(["python", "./RL_model_V2_WATER/RL_model_V2_WATER.py"])
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: RL_model_V1_WATER.py program failed with CalledProcessError: {e}")
-        print(f"Stderr: {e.stderr}")
-    except FileNotFoundError:
-        print(f"WARNING: File not found, skipping run {curr_run + 1}")
-        continue
-
-    try:
-        water_v2_df = pd.read_csv("./RL_model_V2_WATER/V2_testing_log_combined.csv")
-        water_v2_run_data = water_v2_df.iloc[0]
-    except FileNotFoundError:
-        print("ERROR: Could not find the log file: './RL_model_V2_WATER/V2_testing_log_combined.csv'")
-        continue
-
-    ratios = parse_ratios_string(water_v2_run_data["Chosen Encryption Ratios"])
-    sum_errors = parse_per_party_string(water_v2_run_data["Per-Party Summation Errors"])
-    dev_errors = parse_per_party_string(water_v2_run_data["Per-Party Deviation Errors"])
-    enc_times = parse_per_party_string(water_v2_run_data["Per-Party Encryption Times (NS)"])
-    dec_times = parse_per_party_string(water_v2_run_data["Per-Party Decryption Times (NS)"])
-    sum_ops_times = parse_per_party_string(water_v2_run_data["Per-Party Summation Operations Times (NS)"])
-    dev_ops_times = parse_per_party_string(water_v2_run_data["Per-Party Deviation Operations Times (NS)"])
-
-    reid_rate = water_v2_run_data["Reidentification Rate"]
-    reid_duration = water_v2_run_data["Reidentification Duration (NS)"]
-    mem_consumption = water_v2_run_data["Memory Consumption (MiB)"]
-
-    for hh_id in water_test_households:
-        if hh_id in ratios:
-            water_v2_all_runs_data.append({
-                "household_id": hh_id,
-                "Encryption Ratio": ratios.get(hh_id),
-                "Reidentification Rate": reid_rate,
-                "Reidentification Duration (NS)": reid_duration,
-                "Memory Consumption (MiB)": mem_consumption,
-                "Summation Error": sum_errors.get(hh_id),
-                "Deviation Error": dev_errors.get(hh_id),
-                "Encryption Time (NS)": enc_times.get(hh_id),
-                "Decryption Time (NS)": dec_times.get(hh_id),
-                "Summation Operations Time (NS)": sum_ops_times.get(hh_id),
-                "Deviation Operations Time (NS)": dev_ops_times.get(hh_id),
-            })
-
-water_v2_per_household_analysis = {}
-if water_v2_all_runs_data:
-    results_df = pd.DataFrame(water_v2_all_runs_data)
-
-    analysis = results_df.groupby('household_id').agg(['mean', 'std'])
-
-    analysis.columns = ['_'.join(col).strip() for col in analysis.columns.values]
-
-    column_rename_map = {
-        'Encryption Ratio_mean': 'Average Encryption Ratio',
-        'Reidentification Rate_mean': 'Average Reidentification Rate',
-        'Memory Consumption (MiB)_mean': 'Average Memory Consumption',
-        'Summation Error_mean': 'Average Summation Error',
-        'Deviation Error_mean': 'Average Deviation Error',
-        'Encryption Time (NS)_mean': 'Average Encryption Time',
-        'Decryption Time (NS)_mean': 'Average Decryption Time',
-        'Summation Operations Time (NS)_mean': 'Average Summation Operations Time',
-        'Deviation Operations Time (NS)_mean': 'Average Deviation Operations Time',
-
-        'Encryption Ratio_std': 'Standard Deviation Encryption Ratio',
-        'Reidentification Rate_std': 'Standard Deviation Reidentification Rate',
-        'Memory Consumption (MiB)_std': 'Standard Deviation Memory Consumption',
-        'Summation Error_std': 'Standard Deviation Summation Error',
-        'Deviation Error_std': 'Standard Deviation Deviation Error',
-        'Encryption Time (NS)_std': 'Standard Deviation Encryption Time',
-        'Decryption Time (NS)_std': 'Standard Deviation Decryption Time',
-        'Summation Operations Time (NS)_std': 'Standard Deviation Summation Operations Time',
-        'Deviation Operations Time (NS)_std': 'Standard Deviation Deviation Operations Time',
-    }
-
-    water_v2_per_household_analysis = analysis.rename(columns=column_rename_map)
-else:
-    water_v2_per_household_analysis = pd.DataFrame()
+# # ----------------------------------------------------------------------------------------------------------------------
+# # WATER MODEL V2 CODE:
+# water_v2_all_runs_data = []
+# for curr_run in range(number_of_runs):
+#     print(f"--- Starting Water Model V2, Run {curr_run + 1} ---")
+#     try:
+#         subprocess.run(["python", "./RL_model_V2_WATER/RL_model_V2_WATER.py"])
+#     except subprocess.CalledProcessError as e:
+#         print(f"ERROR: RL_model_V1_WATER.py program failed with CalledProcessError: {e}")
+#         print(f"Stderr: {e.stderr}")
+#     except FileNotFoundError:
+#         print(f"WARNING: File not found, skipping run {curr_run + 1}")
+#         continue
+#
+#     try:
+#         water_v2_df = pd.read_csv("./RL_model_V2_WATER/V2_testing_log_combined.csv")
+#         water_v2_run_data = water_v2_df.iloc[0]
+#     except FileNotFoundError:
+#         print("ERROR: Could not find the log file: './RL_model_V2_WATER/V2_testing_log_combined.csv'")
+#         continue
+#
+#     ratios = parse_ratios_string(water_v2_run_data["Chosen Encryption Ratios"])
+#     sum_errors = parse_per_party_string(water_v2_run_data["Per-Party Summation Errors"])
+#     dev_errors = parse_per_party_string(water_v2_run_data["Per-Party Deviation Errors"])
+#     enc_times = parse_per_party_string(water_v2_run_data["Per-Party Encryption Times (NS)"])
+#     dec_times = parse_per_party_string(water_v2_run_data["Per-Party Decryption Times (NS)"])
+#     sum_ops_times = parse_per_party_string(water_v2_run_data["Per-Party Summation Operations Times (NS)"])
+#     dev_ops_times = parse_per_party_string(water_v2_run_data["Per-Party Deviation Operations Times (NS)"])
+#
+#     reid_rate = water_v2_run_data["Reidentification Rate"]
+#     reid_duration = water_v2_run_data["Reidentification Duration (NS)"]
+#     mem_consumption = water_v2_run_data["Memory Consumption (MiB)"]
+#
+#     for hh_id in water_test_households:
+#         if hh_id in ratios:
+#             water_v2_all_runs_data.append({
+#                 "household_id": hh_id,
+#                 "Encryption Ratio": ratios.get(hh_id),
+#                 "Reidentification Rate": reid_rate,
+#                 "Reidentification Duration (NS)": reid_duration,
+#                 "Memory Consumption (MiB)": mem_consumption,
+#                 "Summation Error": sum_errors.get(hh_id),
+#                 "Deviation Error": dev_errors.get(hh_id),
+#                 "Encryption Time (NS)": enc_times.get(hh_id),
+#                 "Decryption Time (NS)": dec_times.get(hh_id),
+#                 "Summation Operations Time (NS)": sum_ops_times.get(hh_id),
+#                 "Deviation Operations Time (NS)": dev_ops_times.get(hh_id),
+#             })
+#
+# water_v2_per_household_analysis = {}
+# if water_v2_all_runs_data:
+#     results_df = pd.DataFrame(water_v2_all_runs_data)
+#
+#     analysis = results_df.groupby('household_id').agg(['mean', 'std'])
+#
+#     analysis.columns = ['_'.join(col).strip() for col in analysis.columns.values]
+#
+#     column_rename_map = {
+#         'Encryption Ratio_mean': 'Average Encryption Ratio',
+#         'Reidentification Rate_mean': 'Average Reidentification Rate',
+#         'Memory Consumption (MiB)_mean': 'Average Memory Consumption',
+#         'Summation Error_mean': 'Average Summation Error',
+#         'Deviation Error_mean': 'Average Deviation Error',
+#         'Encryption Time (NS)_mean': 'Average Encryption Time',
+#         'Decryption Time (NS)_mean': 'Average Decryption Time',
+#         'Summation Operations Time (NS)_mean': 'Average Summation Operations Time',
+#         'Deviation Operations Time (NS)_mean': 'Average Deviation Operations Time',
+#
+#         'Encryption Ratio_std': 'Standard Deviation Encryption Ratio',
+#         'Reidentification Rate_std': 'Standard Deviation Reidentification Rate',
+#         'Memory Consumption (MiB)_std': 'Standard Deviation Memory Consumption',
+#         'Summation Error_std': 'Standard Deviation Summation Error',
+#         'Deviation Error_std': 'Standard Deviation Deviation Error',
+#         'Encryption Time (NS)_std': 'Standard Deviation Encryption Time',
+#         'Decryption Time (NS)_std': 'Standard Deviation Decryption Time',
+#         'Summation Operations Time (NS)_std': 'Standard Deviation Summation Operations Time',
+#         'Deviation Operations Time (NS)_std': 'Standard Deviation Deviation Operations Time',
+#     }
+#
+#     water_v2_per_household_analysis = analysis.rename(columns=column_rename_map)
+# else:
+#     water_v2_per_household_analysis = pd.DataFrame()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # MODEL V2 RESULT PRINTING CODE:
 advanced_analyses = {
-    "water_v2": water_v2_per_household_analysis,
+    # "water_v2": water_v2_per_household_analysis,
     "electricity_v2": electricity_v2_per_household_analysis,
 }
 

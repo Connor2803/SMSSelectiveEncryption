@@ -608,7 +608,7 @@ class EncryptionSelectorEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        print("DEBUG: Environment reset called.")
+        # print("DEBUG: Environment reset called.")
 
         self._current_household_idx = 0
         self._current_section_idx_in_household = 0
