@@ -8,8 +8,8 @@ import re
 from collections import defaultdict
 
 # GLOBAL VARIABLES
-number_of_runs = 10 # Number of times the RL model scripts are called.
-attackBlockSizes = ["12", "24", "36", "48"] # Where 12 refers to half a day's worth of utility readings exposed to the attacker,
+number_of_runs = 2 # Number of times the RL model scripts are called.
+attackBlockSizes = ["12", "24"] # Where 12 refers to half a day's worth of utility readings exposed to the attacker, # "36", "48"
 
 # The fixed 10 test households that will be compared across all RL models.
 electricity_test_households = ["MAC000248.csv",
