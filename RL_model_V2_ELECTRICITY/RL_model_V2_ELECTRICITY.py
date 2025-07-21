@@ -28,6 +28,8 @@ GO_EXECUTABLE_PATH = os.path.join(SCRIPT_DIR, EXECUTABLE_NAME)
 print(f"\nGo executable path: {GO_EXECUTABLE_PATH}")
 print(f"\nGo source path: {GO_SOURCE_PATH}")
 
+currentLeakedPlaintextSize = "12"
+
 class Welford:
     def __init__(self):
         # Where, M is the mean, S is the sum of square differences, V is the variance,
@@ -487,7 +489,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                        [GO_EXECUTABLE_PATH, data_for_go_filepath],
+                        [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
                         capture_output=True,
                         text=True,
                         check=True,
@@ -836,9 +838,9 @@ class SectionLoggingCallback(BaseCallback):
 def main():
     if len(sys.argv) != 2:
         print("WARNING: Not enough arguments provided! Please provide the atdSize.")
-        currentAtdSize = "12"
+        currentLeakedPlaintextSize = "12"
     else:
-        global currentAtdSize = sys.argv[1]
+        currentLeakedPlaintextSize = sys.argv[1]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
