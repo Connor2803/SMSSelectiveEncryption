@@ -113,8 +113,9 @@ func main() {
 		args = append(args, num)
 	}
 
-	if len(args) > 0 {
+	if len(args) > 1 {
 		currentDataset = args[0]
+		leakedPlaintextSize = args[1]
 	}
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string

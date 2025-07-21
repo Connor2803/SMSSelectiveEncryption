@@ -1,6 +1,6 @@
 /*
 running command: // dataset
-go run .\RL_model_V1_ELECTRICITY\generate_metrics_V1.go 2
+go run .\RL_model_V1_ELECTRICITY\generate_metrics_V1.go 2 <atdSize>
 > Run this code for the electricity dataset.
 */
 
@@ -93,11 +93,11 @@ var maxHouseholdsNumber = 80
 var sectionNum int
 var globalPartyRows = -1
 
-var max_attackLoop = 1000 // Default value for number of loops for membershipIdentificationAttack.
-var atdSize = 12          // Element number of unique attacker data
-var uniqueATD int = 0     // Unique attacker data, 1 for true, 0 for false
+var maxAttackloop = 1000 // Default value for number of loops for membershipIdentificationAttack.
+var atdSize = 12         // Element number of unique attacker data
+var uniqueATD int = 0    // Unique attacker data, 1 for true, 0 for false
 var usedRandomStartPartyPairs = map[int][]int{}
-var min_percent_matched = 90 // Default value for minimum percentage match for identification.
+var minPercentMatched = 90 // Default value for minimum percentage match for identification.
 
 func main() {
 
@@ -114,9 +114,12 @@ func main() {
 		args = append(args, num)
 	}
 
-	if len(args) > 0 {
+	if len(args) > 1 {
 		currentDataset = args[0]
+		atdSize = args[1]
 	}
+	fmt.Printf("Using dataset: %d and atdSize: %d\n", currentDataset, atdSize)
+
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 
@@ -413,7 +416,7 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		attackPhaseEndTime := time.Now()
 		asrAttackDuration := attackPhaseEndTime.Sub(attackPhaseStartTime)
-		avgTimePerAttackRun := asrAttackDuration.Seconds() / float64(max_attackLoop)
+		avgTimePerAttackRun := asrAttackDuration.Seconds() / float64(maxAttackloop)
 
 		for key, result := range allResults {
 			if key.EncryptionRatio == encRatio {
@@ -810,7 +813,7 @@ func memberIdentificationAttack(P []*Party, currentEncRatio float64) []float64 {
 	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
 	var std float64
 	var standard_error float64
-	for attackCount = 0; attackCount < max_attackLoop; attackCount++ {
+	for attackCount = 0; attackCount < maxAttackloop; attackCount++ {
 		var successNum = attackParties(P, currentEncRatio)         // Integer result of one attack run.
 		successCounts = append(successCounts, float64(successNum)) // Stores the success count for this run.
 
@@ -953,7 +956,7 @@ func identifyParty(P []*Party, attackerRawBlock []float64, originalPartyIdx int,
 	}
 
 	// Minimum length of the array to be considered a match.
-	var min_length int = int(math.Ceil(float64(len(simulatedEncryptedBlock)) * float64(min_percent_matched) / 100))
+	var min_length int = int(math.Ceil(float64(len(simulatedEncryptedBlock)) * float64(minPercentMatched) / 100))
 
 	// Iterate through ALL parties and ALL their encrypted data blocks to find a match.
 	for partyIdx, currentParty := range P {
@@ -981,7 +984,7 @@ func identifyParty(P []*Party, attackerRawBlock []float64, originalPartyIdx int,
 							break
 						}
 					}
-					isBlockMatch = float64(matchCount)/float64(len(simulatedEncryptedBlock)) >= float64(min_percent_matched)/100.0
+					isBlockMatch = float64(matchCount)/float64(len(simulatedEncryptedBlock)) >= float64(minPercentMatched)/100.0
 				}
 
 				if isBlockMatch {

@@ -834,6 +834,12 @@ class SectionLoggingCallback(BaseCallback):
 
 
 def main():
+    if len(sys.argv) != 2:
+        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
+        currentAtdSize = "12"
+    else:
+        global currentAtdSize = sys.argv[1]
+
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
     except subprocess.CalledProcessError as e:

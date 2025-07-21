@@ -425,14 +425,30 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
     ])
 
 def main():
+    if len(sys.argv) != 2:
+        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
+        currentAtdSize = "12"
+    else:
+        currentAtdSize = sys.argv[1]
+
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Failed to compile Go program: {e}")
+        print(f"Stderr: {e.stderr}")
         return
 
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
+
+    print(f"Running Go metrics generator with atdSize = {currentAtdSize}...")
+    try:
+        run_args = [GO_EXECUTABLE_PATH, "2", currentAtdSize]
+        subprocess.run(run_args, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to run Go program: {e}")
+        print(f"Stderr: {e.stderr}")
+        return
 
     # ----- TRAINING PHASE ------
     env_train = EncryptionSelectorEnv(dataset_type="train")

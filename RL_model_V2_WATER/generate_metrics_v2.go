@@ -99,10 +99,13 @@ func getExecutableDir() string {
 
 func main() {
 	// 1. Get input file path from command-line arguments.
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: ./generate_metrics_v2 <path_to_rl_choices.json>")
+	if len(os.Args) < 3 {
+		log.Fatal("Usage: ./generate_metrics_v2 <path_to_rl_choices.json> <leakedPlaintextSize>")
 	}
 	rlChoicesPath := os.Args[1]
+	var err error
+	leakedPlaintextSize, err = strconv.Atoi(os.Args[2])
+	check(err)
 
 	// 2. Read the RL agent's choices from the JSON file
 	choices, err := readRLChoices(rlChoicesPath)
