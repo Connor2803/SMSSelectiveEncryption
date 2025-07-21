@@ -7,9 +7,8 @@ import statistics
 import re
 from collections import defaultdict
 
-
 # GLOBAL VARIABLES
-number_of_runs = 2 # Number of times the RL model scripts are called.
+number_of_runs = 10 # Number of times the RL model scripts are called.
 
 # The fixed 10 test households that will be compared across all RL models.
 electricity_test_households = ["MAC000248.csv",
@@ -36,8 +35,7 @@ water_test_households = ["e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv",
 # String parsing functions for RL V2 test .csvs
 def parse_ratios_string(s: str) -> dict:
     """
-    Parses the 'Chosen Encryption Ratios' string.
-    e.g., "H...-S0:0.1; H...-S1:0.2"
+    Parses the 'Chosen Encryption Ratios' string, e.g., "H...-S0:0.1; H...-S1:0.2".
     Returns a dictionary mapping household ID to its average ratio for the run.
     """
     ratios_by_hh = defaultdict(list)
@@ -47,9 +45,10 @@ def parse_ratios_string(s: str) -> dict:
     # Regex to find household ID and ratio value
     pattern = re.compile(r"(H(?:[ef][\w-]+|MAC\d+)\.csv)-S\d+:(\d+\.\d+)")
     matches = pattern.findall(s)
-    
+
     for household_id, ratio_str in matches:
-        ratios_by_hh[household_id].append(float(ratio_str))
+        key = household_id[1:] if household_id.startswith('H') else household_id
+        ratios_by_hh[key].append(float(ratio_str))
 
     # Calculate the average ratio for each household
     avg_ratios = {hh: statistics.mean(r_list) for hh, r_list in ratios_by_hh.items()}
@@ -58,8 +57,7 @@ def parse_ratios_string(s: str) -> dict:
 
 def parse_per_party_string(s: str) -> dict:
     """
-    Parses a generic 'Per-Party' metric string.
-    e.g., "H...:123.45; H...:678.90"
+    Parses a generic 'Per-Party' metric string, e.g., "H...:123.45; H...:678.90".
     Returns a dictionary mapping household ID to its metric value.
     """
     metrics = {}
@@ -380,7 +378,6 @@ def parse_per_party_string(s: str) -> dict:
 #             # "Standard Deviation Encryption Time": std_encryption_time,
 #         }
 #
-#         # print(f"DEBUG: Analysis for household {household_id}: {water_v1_5_per_household_analysis[household_id]}")
 # # ----------------------------------------------------------------------------------------------------------------------
 # # MODEL V1 AND V1.5 RESULT PRINTING CODE:
 # basic_analyses = {
@@ -571,6 +568,10 @@ advanced_analyses = {
 for label, data_df in advanced_analyses.items():
     if not data_df.empty:
         output_filename = f"{label}_result.txt"
-        with open(output_filename, "w") as f:
-            f.write(data_df.to_string())
+        try:
+            with open(output_filename, "w") as f:
+                f.write(data_df.to_string())
+                print(f"DEBUG: Wrote {output_filename}")
+        except FileNotFoundError:
+            print(f"ERROR: Could not write to file: {output_filename}")
 # ----------------------------------------------------------------------------------------------------------------------

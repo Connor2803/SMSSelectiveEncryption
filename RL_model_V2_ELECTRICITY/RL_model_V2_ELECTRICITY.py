@@ -854,7 +854,7 @@ def main():
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
-    model.learn(total_timesteps=6000, callback=callback)
+    model.learn(total_timesteps=60000, callback=callback)
     model.save("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
 
     end_time_train = time.time()
