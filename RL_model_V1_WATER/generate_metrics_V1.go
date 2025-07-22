@@ -118,6 +118,8 @@ func main() {
 		currentDataset = args[0]
 		atdSize = args[1]
 	}
+	fmt.Printf("Using dataset: %d and atdSize: %d\n", currentDataset, atdSize)
+
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 

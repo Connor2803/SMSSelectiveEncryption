@@ -440,7 +440,7 @@ def main():
     print(f"Running Go metrics generator with atdSize = {currentAtdSize}...")
     try:
         run_args = [GO_EXECUTABLE_PATH, "2", currentAtdSize]
-        subprocess.run(run_args, check=True, capture_output=True, text=True, timeout=180)
+        subprocess.run(run_args, check=True, capture_output=True, text=True, timeout=600)
     except subprocess.CalledProcessError as e:
         print(f"Failed to run Go program: {e}")
         print(f"Stderr: {e.stderr}")

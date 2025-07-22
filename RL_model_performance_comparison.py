@@ -8,8 +8,8 @@ import re
 from collections import defaultdict
 
 # GLOBAL VARIABLES
-number_of_runs = 2 # Number of times the RL model scripts are called.
-attackBlockSizes = ["12", "24"] # Where 12 refers to half a day's worth of utility readings exposed to the attacker, # "36", "48"
+number_of_runs = 2  # Number of times the RL model scripts are called.
+attackBlockSizes = ["12", "24", "36", "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
 
 # The fixed 10 test households that will be compared across all RL models.
 electricity_test_households = ["MAC000248.csv",
@@ -33,6 +33,8 @@ water_test_households = ["e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv",
                          "f5a28746-11f7-423f-9ae0-204a9b6d50ac.csv",
                          "faea8eb7-c134-4c8b-99ac-c2c7ddd60d8b.csv",
                          ]
+
+
 # String parsing functions for RL V2 test .csvs
 def parse_ratios_string(s: str) -> dict:
     """
@@ -77,6 +79,7 @@ def parse_per_party_string(s: str) -> dict:
             except (ValueError, IndexError):
                 continue
     return metrics
+
 
 for attackBlockSize in attackBlockSizes:
     # ------------------------------------------------------------------------------------------------------------------
@@ -158,12 +161,11 @@ for attackBlockSize in attackBlockSizes:
             }
 
             # print(f"DEBUG: Analysis for household {household_id}: {electricity_v1_per_household_analysis[household_id]}")
-
     # ------------------------------------------------------------------------------------------------------------------
     # ELECTRICITY MODEL V1.5 CODE:
     electricity_v1_5_run_data = {hh: [] for hh in electricity_test_households}
     for curr_run in range(number_of_runs):
-        print(f"\n\n\n--- Starting Electricity Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize}---")
+        print(f"\n\n\n--- Starting Electricity Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
 
         try:
             subprocess.run(["python", "./RL_model_V1-5_ELECTRICITY/RL_model_V1-5_ELECTRICITY.py", attackBlockSize])
@@ -237,13 +239,12 @@ for attackBlockSize in attackBlockSizes:
                 "Standard Deviation Encryption Time": std_encryption_time,
             }
             # print(f"DEBUG: Analysis for household {household_id}: {electricity_v1_5_per_household_analysis[household_id]}")
-
     # ------------------------------------------------------------------------------------------------------------------
     # WATER MODEL V1 CODE:
     water_v1_run_data = {hh: [] for hh in water_test_households}
     # MODEL V1 WATER DATA GATHERING
     for curr_run in range(number_of_runs):
-        print(f"\n\n\n--- Starting Water Model V1, Run {curr_run + 1} with attackBlockSize:{attackBlockSize}---")
+        print(f"\n\n\n--- Starting Water Model V1, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
 
         try:
             subprocess.run(["python", "./RL_model_V1_WATER/RL_model_V1_WATER.py", attackBlockSize])
@@ -261,7 +262,7 @@ for attackBlockSize in attackBlockSizes:
             continue
 
         water_v1_df["HouseholdID"] = pd.Categorical(water_v1_df["HouseholdID"],
-                                                          categories=water_test_households, ordered=True)
+                                                    categories=water_test_households, ordered=True)
         water_v1_df_sorted = water_v1_df.sort_values("HouseholdID")
         for water_household_id in water_test_households:
             curr_water_household_data = water_v1_df_sorted[
@@ -316,12 +317,11 @@ for attackBlockSize in attackBlockSizes:
             }
 
             # print(f"DEBUG: Analysis for household {household_id}: {water_v1_per_household_analysis[household_id]}")
-
     # ------------------------------------------------------------------------------------------------------------------
     # WATER MODEL V1.5 CODE:
     water_v1_5_run_data = {hh: [] for hh in water_test_households}
     for curr_run in range(number_of_runs):
-        print(f"\n\n\n--- Starting Water Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize}---")
+        print(f"\n\n\n--- Starting Water Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
 
         try:
             subprocess.run(["python", "./RL_model_V1-5_WATER/RL_model_V1-5_WATER.py", attackBlockSize])
@@ -339,7 +339,7 @@ for attackBlockSize in attackBlockSizes:
             continue
 
         water_v1_5_df["HouseholdID"] = pd.Categorical(water_v1_5_df["HouseholdID"],
-                                                          categories=water_test_households, ordered=True)
+                                                      categories=water_test_households, ordered=True)
         water_v1_5_df_sorted = water_v1_5_df.sort_values("HouseholdID")
 
         for water_household_id in water_test_households:
@@ -394,12 +394,11 @@ for attackBlockSize in attackBlockSizes:
                 "Average Encryption Time": avg_encryption_time,
                 "Standard Deviation Encryption Time": std_encryption_time,
             }
-
     # ------------------------------------------------------------------------------------------------------------------
     # MODEL V1 AND V1.5 RESULT PRINTING CODE:
     basic_analyses = {
-        "electricity_v1": electricity_v1_per_household_analysis,
-        "electricity_v1_5": electricity_v1_5_per_household_analysis,
+        # "electricity_v1": electricity_v1_per_household_analysis,
+        # "electricity_v1_5": electricity_v1_5_per_household_analysis,
 
         "water_v1": water_v1_per_household_analysis,
         "water_v1_5": water_v1_5_per_household_analysis,
@@ -496,12 +495,11 @@ for attackBlockSize in attackBlockSizes:
         electricity_v2_per_household_analysis = analysis.rename(columns=column_rename_map)
     else:
         electricity_v2_per_household_analysis = pd.DataFrame()
-
     # ------------------------------------------------------------------------------------------------------------------
     # WATER MODEL V2 CODE:
     water_v2_all_runs_data = []
     for curr_run in range(number_of_runs):
-        print(f"\n\n\n--- Starting Water Model V2, Run {curr_run + 1} with attackBlockSize:{attackBlockSize}---")
+        print(f"\n\n\n--- Starting Water Model V2, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
         try:
             subprocess.run(["python", "./RL_model_V2_WATER/RL_model_V2_WATER.py", attackBlockSize])
         except subprocess.CalledProcessError as e:
@@ -579,7 +577,6 @@ for attackBlockSize in attackBlockSizes:
         water_v2_per_household_analysis = analysis.rename(columns=column_rename_map)
     else:
         water_v2_per_household_analysis = pd.DataFrame()
-
     # ------------------------------------------------------------------------------------------------------------------
     # MODEL V2 RESULT PRINTING CODE:
     advanced_analyses = {

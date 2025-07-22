@@ -30,6 +30,7 @@ print(f"\nGo source path: {GO_SOURCE_PATH}")
 
 currentLeakedPlaintextSize = "12"
 
+
 class Welford:
     def __init__(self):
         # Where, M is the mean, S is the sum of square differences, V is the variance,
@@ -76,7 +77,8 @@ class Welford:
 
         self.k = 0
 
-    def update(self, current_reidentification_rate, current_reidentification_duration, current_memory_consumption, current_summation_error,
+    def update(self, current_reidentification_rate, current_reidentification_duration, current_memory_consumption,
+               current_summation_error,
                current_deviation_error, current_encryption_time, current_decryption_time,
                current_summation_operations_time,
                current_deviation_operations_time):
@@ -93,7 +95,8 @@ class Welford:
         old_deviation_operations_time_M = self.deviation_operations_time_M
 
         self.reidentification_rate_M += (current_reidentification_rate - self.reidentification_rate_M) / self.k
-        self.reidentification_duration_M += (current_reidentification_duration - self.reidentification_duration_M) / self.k
+        self.reidentification_duration_M += (
+                                                        current_reidentification_duration - self.reidentification_duration_M) / self.k
         self.memory_consumption_M += (current_memory_consumption - self.memory_consumption_M) / self.k
         self.summation_error_M += (current_summation_error - self.summation_error_M) / self.k
         self.deviation_error_M += (current_deviation_error - self.deviation_error_M) / self.k
@@ -104,7 +107,8 @@ class Welford:
         self.deviation_operations_time_M += (
                                                     current_deviation_operations_time - self.deviation_operations_time_M) / self.k
 
-        self.reidentification_rate_S += (current_reidentification_rate - self.reidentification_rate_M) * (current_reidentification_rate - old_reidentification_rate_M)
+        self.reidentification_rate_S += (current_reidentification_rate - self.reidentification_rate_M) * (
+                    current_reidentification_rate - old_reidentification_rate_M)
         self.reidentification_duration_S += (current_reidentification_duration - self.reidentification_duration_M) * (
                 current_reidentification_duration - old_reidentification_duration_M)
         self.memory_consumption_S += (current_memory_consumption - self.memory_consumption_M) * (
@@ -136,11 +140,13 @@ class Welford:
         self.summation_operations_time_V = self.summation_operations_time_S / (self.k - 1)
         self.deviation_operations_time_V = self.deviation_operations_time_S / (self.k - 1)
 
-        return [self.reidentification_rate_V, self.reidentification_duration_V, self.memory_consumption_V, self.summation_error_V,
+        return [self.reidentification_rate_V, self.reidentification_duration_V, self.memory_consumption_V,
+                self.summation_error_V,
                 self.deviation_error_V, self.encryption_time_V, self.decryption_time_V,
                 self.summation_operations_time_V, self.deviation_operations_time_V]
 
-    def get_standardised_values(self, current_reidentification_rate, current_reidentification_duration, current_memory_consumption,
+    def get_standardised_values(self, current_reidentification_rate, current_reidentification_duration,
+                                current_memory_consumption,
                                 current_summation_error,
                                 current_deviation_error, current_encryption_time, current_decryption_time,
                                 current_summation_operations_time, current_deviation_operations_time):
@@ -150,7 +156,8 @@ class Welford:
         std_devs = [math.sqrt(v) if v > 0 else 1e-8 for v in self.get_variance()]
 
         self.reidentification_rate_Z = (current_reidentification_rate - self.reidentification_rate_M) / std_devs[0]
-        self.reidentification_duration_Z = (current_reidentification_duration - self.reidentification_duration_M) / std_devs[1]
+        self.reidentification_duration_Z = (current_reidentification_duration - self.reidentification_duration_M) / \
+                                           std_devs[1]
         self.memory_consumption_Z = (current_memory_consumption - self.memory_consumption_M) / std_devs[2]
         self.summation_error_Z = (current_summation_error - self.summation_error_M) / std_devs[3]
         self.deviation_error_Z = (current_deviation_error - self.deviation_error_M) / std_devs[4]
@@ -161,7 +168,8 @@ class Welford:
         self.deviation_operations_time_Z = (current_deviation_operations_time - self.deviation_operations_time_M) / \
                                            std_devs[8]
 
-        return [self.reidentification_rate_Z, self.reidentification_duration_Z, self.memory_consumption_Z, self.summation_error_Z,
+        return [self.reidentification_rate_Z, self.reidentification_duration_Z, self.memory_consumption_Z,
+                self.summation_error_Z,
                 self.deviation_error_Z, self.encryption_time_Z, self.decryption_time_Z,
                 self.summation_operations_time_Z, self.deviation_operations_time_Z]
 
@@ -269,8 +277,8 @@ class EncryptionSelectorEnv(gym.Env):
         # NOTE: The keys here MUST match the keys in _get_observation()
         self.observation_space = gym.spaces.Dict({
             "section_level_electricity_usage": gym.spaces.Box(low=self._min_section_level_electricity_usage,
-                                                        high=self._max_section_level_electricity_usage,
-                                                        shape=(1,), dtype=np.float64),
+                                                              high=self._max_section_level_electricity_usage,
+                                                              shape=(1,), dtype=np.float64),
             "section_raw_entropy": gym.spaces.Box(low=self._min_global_entropy,
                                                   high=self._max_global_entropy, shape=(1,), dtype=np.float64),
 
@@ -429,7 +437,8 @@ class EncryptionSelectorEnv(gym.Env):
 
         intermediate_reward = scaled_remaining_entropy
         reward = intermediate_reward
-        self._episode_choices_for_log.append(f"H{current_household_id}-S{current_section_number}:{selected_encryption_ratio:.2f}")
+        self._episode_choices_for_log.append(
+            f"H{current_household_id}-S{current_section_number}:{selected_encryption_ratio:.2f}")
 
         # Advance to the next section.
         self._current_section_idx_in_household += 1
@@ -489,11 +498,11 @@ class EncryptionSelectorEnv(gym.Env):
                 # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                        [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                        timeout = 120 # seconds
+                    [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=1200,  # 20 minutes
                 )
 
                 # print(f"Go Program stdout: {go_result.stdout}")
@@ -519,12 +528,14 @@ class EncryptionSelectorEnv(gym.Env):
                 global_deviation_operations_time = sum(
                     p["deviationOpsTimeNS"] for p in self._all_party_metrics.values())
 
-                self._welford.update(global_reidentification_rate, global_reidentification_duration, global_memory_consumption,
+                self._welford.update(global_reidentification_rate, global_reidentification_duration,
+                                     global_memory_consumption,
                                      global_summation_error, global_deviation_error, global_encryption_time,
                                      global_decryption_time, global_summation_operations_time,
                                      global_deviation_operations_time)
 
-                z_scores = self._welford.get_standardised_values(global_reidentification_rate, global_reidentification_duration,
+                z_scores = self._welford.get_standardised_values(global_reidentification_rate,
+                                                                 global_reidentification_duration,
                                                                  global_memory_consumption,
                                                                  global_summation_error, global_deviation_error,
                                                                  global_encryption_time,
@@ -632,6 +643,7 @@ class EncryptionSelectorEnv(gym.Env):
     def render(self):
         pass
 
+
 class SectionLoggingCallback(BaseCallback):
     """
     A custom callback that derives from ``BaseCallback``.
@@ -642,7 +654,8 @@ class SectionLoggingCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, current_dataset_type: str, log_path_global_train: str, log_path_global_test_ph: str, log_path_global_test_combined, verbose: int = 0):
+    def __init__(self, current_dataset_type: str, log_path_global_train: str, log_path_global_test_ph: str,
+                 log_path_global_test_combined, verbose: int = 0):
         super().__init__(verbose)
 
         # self.log_path_section = log_path_section
@@ -901,7 +914,8 @@ def main():
         current_dataset_type="test_combined",
         log_path_global_train=None,
         log_path_global_test_ph=None,
-        log_path_global_test_combined=os.path.join(os.getcwd(), './RL_model_V2_ELECTRICITY/V2_testing_log_combined.csv'),
+        log_path_global_test_combined=os.path.join(os.getcwd(),
+                                                   './RL_model_V2_ELECTRICITY/V2_testing_log_combined.csv'),
         verbose=0
     )
     combined_test_callback.init_callback(model)
@@ -976,6 +990,7 @@ def main():
     # print(f"Per-household testing finished at: {time.ctime(end_time_ph)}")
     # elapsed_time_ph = end_time_ph - start_time_ph
     # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()

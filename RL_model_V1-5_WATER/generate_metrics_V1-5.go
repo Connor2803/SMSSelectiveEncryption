@@ -117,6 +117,8 @@ func main() {
 		currentDataset = args[0]
 		leakedPlaintextSize = args[1]
 	}
+	fmt.Printf("Using dataset: %d and leakedPlaintextSize: %d\n", currentDataset, leakedPlaintextSize)
+
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 
