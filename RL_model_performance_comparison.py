@@ -8,8 +8,8 @@ import re
 from collections import defaultdict
 
 # GLOBAL VARIABLES
-number_of_runs = 2  # Number of times the RL model scripts are called.
-attackBlockSizes = ["12", "24", "36", "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
+number_of_runs = 10  # Number of times the RL model scripts are called.
+attackBlockSizes = ["12", "24", "36", "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker.
 
 # The fixed 10 test households that will be compared across all RL models.
 electricity_test_households = ["MAC000248.csv",
@@ -397,8 +397,8 @@ for attackBlockSize in attackBlockSizes:
     # ------------------------------------------------------------------------------------------------------------------
     # MODEL V1 AND V1.5 RESULT PRINTING CODE:
     basic_analyses = {
-        # "electricity_v1": electricity_v1_per_household_analysis,
-        # "electricity_v1_5": electricity_v1_5_per_household_analysis,
+        "electricity_v1": electricity_v1_per_household_analysis,
+        "electricity_v1_5": electricity_v1_5_per_household_analysis,
 
         "water_v1": water_v1_per_household_analysis,
         "water_v1_5": water_v1_5_per_household_analysis,

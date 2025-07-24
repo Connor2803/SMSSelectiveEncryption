@@ -71,7 +71,7 @@ const MAXSECTIONNUMBER = 10                        /// Maximum number of section
 const SECTIONSIZE = 1024                           // Default value for the number of utility reading rows to be in each section.
 var maxReidentificationAttempts = 100              // Default value for number of loops for runReidentificationAttack.
 var leakedPlaintextSize = 12                       // Number of electricity meter readings included in the leaked attacker data
-var reidentificationMatchThreshold = 70            // Default value for minimum percentage match for identification.
+var reidentificationMatchThreshold = 90            // Default value for minimum percentage match for identification.
 var usedRandomSectionsByParty = map[string][]int{} // 2D slice to hold which household sections have been used as the attacker block.
 
 func bToMb(b uint64) uint64 {
