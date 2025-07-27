@@ -15,8 +15,8 @@ fi
 
 # Test parameters
 strategies=(1 2 3)  # Global, Local, Adaptive
-datasets=(1 2)      # Water, Electricity  
-encryption_ratios=(20 40 60 80)
+datasets=(1)      # Water, Electricity  
+encryption_ratios=(0 20 40 60 80 100)
 households=20
 
 echo "Starting comprehensive uniqueness testing..."
@@ -37,7 +37,7 @@ for strategy in "${strategies[@]}"; do
             echo "[$test_count/$total_tests] Testing: Strategy=$strategy, Dataset=$dataset, Ratio=$ratio"
             
             cd tests/uniqueness_comprehensive
-            go run test_uniqueness_standalone.go "$strategy" "$dataset" "0" "1" "$ratio" "$households"
+            go run test_uniqueness_datasets.go "$strategy" "$dataset" "0" "1" "$ratio" "$households"
             cd ../..
             
             # Brief pause between tests
