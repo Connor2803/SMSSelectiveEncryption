@@ -1,0 +1,113 @@
+=== COMBINED ASR TESTING WITH MULTIPLE ENCRYPTION RATIOS ===
+Testing encryption ratios: [0 20 40 60 80 100]
+Number of Households: 80
+ATD Size: 24
+================================================================================
+
+=== ENTROPY METRIC ON WATER DATASET ===
+
+--- Testing Water/Entropy with 0% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 0%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [0%] - ASR: 0.890, Standard Error: 0.050
+
+--- Testing Water/Entropy with 20% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 20%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [20%] - ASR: 0.677, Standard Error: 0.033
+
+--- Testing Water/Entropy with 40% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 40%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [40%] - ASR: 0.596, Standard Error: 0.029
+
+--- Testing Water/Entropy with 60% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 60%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [60%] - ASR: 0.511, Standard Error: 0.032
+
+--- Testing Water/Entropy with 80% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 80%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [80%] - ASR: 0.370, Standard Error: 0.032
+
+--- Testing Water/Entropy with 100% encryption ratio ---
+Strategy: Global Entropy High To Low
+Dataset: Water
+Target: Entropy based
+Encryption ratio: 100%
+Found 80 water dataset files
+WATER ENTROPY RESULTS [100%] - ASR: 0.311, Standard Error: 0.029
+
+================================================================================
+
+=== UNIQUENESS METRIC ON ELECTRICITY DATASET ===
+
+--- Testing Electricity/Uniqueness with 0% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 0%
+Found 80 electricity dataset files
+......
+ELECTRICITY UNIQUENESS RESULTS [0%] - ASR: 1.000, Standard Error: 0.000, Average encryption time: 0.00 seconds
+
+--- Testing Electricity/Uniqueness with 20% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 20%
+Found 80 electricity dataset files
+..........
+ELECTRICITY UNIQUENESS RESULTS [20%] - ASR: 0.860, Standard Error: 0.040, Average encryption time: 50.49 seconds
+
+--- Testing Electricity/Uniqueness with 40% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 40%
+Found 80 electricity dataset files
+..........
+ELECTRICITY UNIQUENESS RESULTS [40%] - ASR: 0.560, Standard Error: 0.037, Average encryption time: 91.75 seconds
+
+--- Testing Electricity/Uniqueness with 60% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 60%
+Found 80 electricity dataset files
+..........
+ELECTRICITY UNIQUENESS RESULTS [60%] - ASR: 0.400, Standard Error: 0.033, Average encryption time: 125.42 seconds
+
+--- Testing Electricity/Uniqueness with 80% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 80%
+Found 80 electricity dataset files
+..........
+ELECTRICITY UNIQUENESS RESULTS [80%] - ASR: 0.150, Standard Error: 0.050, Average encryption time: 166.22 seconds
+
+--- Testing Electricity/Uniqueness with 100% encryption ratio ---
+Strategy: Greedy Uniqueness-based
+Dataset: Electricity
+Target: Uniqueness based
+Encryption ratio: 100%
+Found 80 electricity dataset files
+......
+ELECTRICITY UNIQUENESS RESULTS [100%] - ASR: 0.000, Standard Error: 0.000, Average encryption time: 217.83 seconds

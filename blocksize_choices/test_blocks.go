@@ -176,12 +176,12 @@ func main() {
 	// fmt.Println(wd)
 
 	var pathFormat string
+	var path string
 	if strings.Contains(wd, "examples") {
 		pathFormat = filepath.Join("..", "..", "..", "examples", "datasets", "%s", "households_%d")
 	} else {
 		pathFormat = filepath.Join("examples", "datasets", "%s", "households_%d")
 	}
-	var path string
 	if currentDataset == DATASET_WATER {
 		path = fmt.Sprintf(pathFormat, "water", MAX_PARTY_ROWS)
 		transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
@@ -193,6 +193,9 @@ func main() {
 	// Construct the file path relative to the working directory
 	folder := filepath.Join(wd, path)
 	fileList := []string{}
+	fmt.Println("wd:", wd)
+	fmt.Println("path:", path)
+	fmt.Println("folder:", folder)
 	// fmt.Println(folder)
 
 	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
@@ -209,6 +212,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Printf("fileList:%d\n", len(fileList))
 
 	for sectionSize = 1024; sectionSize <= 8192; sectionSize *= 2 {
 		var paramsDef = paramsDefs[int(math.Log2(float64(sectionSize/1024)))]
