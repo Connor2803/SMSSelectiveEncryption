@@ -8,6 +8,9 @@ import (
 )
 
 func main() {
+	maxHouseholdsNumber = 80 // Reduced from 80
+	max_attackLoop = 10      // Reduced from 10
+
 	paramsDef := ckks.PN14QP438
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)

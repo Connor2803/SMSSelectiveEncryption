@@ -1,0 +1,67 @@
+=== SCALABILITY ANALYSIS ===
+Testing scalability with increasing encryption ratios...
+Testing scalability with 10% encryption
+...Testing scalability with 20% encryption
+..Testing scalability with 30% encryption
+..Testing scalability with 40% encryption
+...Testing scalability with 50% encryption
+...Testing scalability with 60% encryption
+...Testing scalability with 70% encryption
+..Testing scalability with 80% encryption
+...Testing scalability with 90% encryption
+...Scalability results saved to scalability_analysis_results.csv
+Scalability analysis completed. Tested 9 ratios.
+
+Scalability Analysis:
+Encryption Ratio: 10%
+  ASR: 0.9333
+  Processing Time: 93.38s
+  Time per encrypted %!:(float64=9.33787096) %!f(MISSING)s
+
+Encryption Ratio: 20%
+  ASR: 0.8000
+  Processing Time: 114.95s
+  Time per encrypted %!:(float64=5.74759971) %!f(MISSING)s
+
+Encryption Ratio: 30%
+  ASR: 0.6000
+  Processing Time: 168.64s
+  Time per encrypted %!:(float64=5.621170263333334) %!f(MISSING)s
+
+Encryption Ratio: 40%
+  ASR: 0.4667
+  Processing Time: 311.77s
+  Time per encrypted %!:(float64=7.7941758975) %!f(MISSING)s
+
+Encryption Ratio: 50%
+  ASR: 0.5667
+  Processing Time: 367.08s
+  Time per encrypted %!:(float64=7.341575824) %!f(MISSING)s
+
+Encryption Ratio: 60%
+  ASR: 0.4000
+  Processing Time: 479.54s
+  Time per encrypted %!:(float64=7.992299973333333) %!f(MISSING)s
+
+Encryption Ratio: 70%
+  ASR: 0.5000
+  Processing Time: 510.36s
+  Time per encrypted %!:(float64=7.2909258914285715) %!f(MISSING)s
+
+Encryption Ratio: 80%
+  ASR: 0.1333
+  Processing Time: 915.65s
+  Time per encrypted %!:(float64=11.445632135) %!f(MISSING)s
+
+Encryption Ratio: 90%
+  ASR: 0.0333
+  Processing Time: 966.21s
+  Time per encrypted %!:(float64=10.73566567888889) %!f(MISSING)s
+
+Computational Complexity Analysis:
+Estimated complexity: Sub-linear (Very efficient)
+Recommended encryption ratio: 90% (best security/performance balance)
+
+Performance Predictions:
+Predicted time for 100% encryption: 1016.77s
+WARNING: 100% encryption may be impractical for real-time applications

@@ -1,0 +1,23 @@
+ATD size analysis completed. Tested 14 configurations.
+
+ATD Size Analysis:
+
+Electricity Dataset Results:
+ATD Size: 6 hours, ASR: 0.0000, Time: 286.36s
+ATD Size: 12 hours, ASR: 0.3000, Time: 449.72s
+ATD Size: 24 hours, ASR: 0.4000, Time: 403.21s
+ATD Size: 48 hours, ASR: 0.1333, Time: 390.33s
+ATD Size: 72 hours, ASR: 0.4667, Time: 380.75s
+ATD Size: 96 hours, ASR: 0.4000, Time: 385.75s
+ATD Size: 168 hours, ASR: 0.1667, Time: 385.01s
+Best ATD size: 6 hours (ASR: 0.0000)
+
+Water Dataset Results:
+ATD Size: 6 hours, ASR: 0.2857, Time: 9.79s
+ATD Size: 12 hours, ASR: 0.4095, Time: 12.48s
+ATD Size: 24 hours, ASR: 0.4762, Time: 13.01s
+ATD Size: 48 hours, ASR: 0.4905, Time: 13.74s
+ATD Size: 72 hours, ASR: 0.5000, Time: 12.62s
+ATD Size: 96 hours, ASR: 0.5857, Time: 15.16s
+ATD Size: 168 hours, ASR: 0.6095, Time: 16.09s
+Best ATD size: 6 hours (ASR: 0.2857)

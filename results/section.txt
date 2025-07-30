@@ -1,0 +1,20 @@
+=== SECTION SIZE OPTIMIZATION TEST ===
+Testing different section sizes for optimal performance/security balance...
+Testing section size: 256
+...Testing section size: 512
+...Testing section size: 1024
+..Testing section size: 2048
+...Testing section size: 4096
+...Testing section size: 8192
+...Results saved to section_size_results.csv
+Section size optimization completed. Tested 6 configurations.
+
+Section Size Results:
+Size: 256, ASR: 0.4000, Time: 6466.71s
+Size: 512, ASR: 0.5333, Time: 1587.29s
+Size: 1024, ASR: 0.3000, Time: 268.06s
+Size: 2048, ASR: 0.5667, Time: 104.36s
+Size: 4096, ASR: 0.6000, Time: 37.58s
+Size: 8192, ASR: 0.7333, Time: 17.85s
+
+Recommended section size: 1024 (ASR: 0.3000)

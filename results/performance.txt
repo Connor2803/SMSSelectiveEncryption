@@ -1,0 +1,63 @@
+=== PERFORMANCE BENCHMARKING ===
+Benchmarking encryption strategies for performance...
+Benchmarking: Strategy=1, Ratio=20%, Dataset=water
+...Benchmarking: Strategy=1, Ratio=20%, Dataset=electricity
+...Benchmarking: Strategy=1, Ratio=40%, Dataset=water
+...Benchmarking: Strategy=1, Ratio=40%, Dataset=electricity
+...Benchmarking: Strategy=1, Ratio=60%, Dataset=water
+...Benchmarking: Strategy=1, Ratio=60%, Dataset=electricity
+...Benchmarking: Strategy=1, Ratio=80%, Dataset=water
+...Benchmarking: Strategy=1, Ratio=80%, Dataset=electricity
+...Benchmarking: Strategy=2, Ratio=20%, Dataset=water
+...Benchmarking: Strategy=2, Ratio=20%, Dataset=electricity
+...Benchmarking: Strategy=2, Ratio=40%, Dataset=water
+...Benchmarking: Strategy=2, Ratio=40%, Dataset=electricity
+...Benchmarking: Strategy=2, Ratio=60%, Dataset=water
+...Benchmarking: Strategy=2, Ratio=60%, Dataset=electricity
+..Benchmarking: Strategy=2, Ratio=80%, Dataset=water
+...Benchmarking: Strategy=2, Ratio=80%, Dataset=electricity
+...Benchmarking: Strategy=3, Ratio=20%, Dataset=water
+...Benchmarking: Strategy=3, Ratio=20%, Dataset=electricity
+...Benchmarking: Strategy=3, Ratio=40%, Dataset=water
+...Benchmarking: Strategy=3, Ratio=40%, Dataset=electricity
+...Benchmarking: Strategy=3, Ratio=60%, Dataset=water
+...Benchmarking: Strategy=3, Ratio=60%, Dataset=electricity
+...Benchmarking: Strategy=3, Ratio=80%, Dataset=water
+..Benchmarking: Strategy=3, Ratio=80%, Dataset=electricity
+..Performance results saved to performance_benchmark_results.csv
+Performance benchmarking completed. Tested 24 configurations.
+
+Performance Benchmark Analysis:
+
+global Strategy Results:
+  Dataset: water, Ratio: 20%, ASR: 0.6667, Time: 5.14s
+  Dataset: electricity, Ratio: 20%, ASR: 0.6667, Time: 171.67s
+  Dataset: water, Ratio: 40%, ASR: 0.5000, Time: 5.06s
+  Dataset: electricity, Ratio: 40%, ASR: 0.5667, Time: 307.99s
+  Dataset: water, Ratio: 60%, ASR: 0.2000, Time: 3.79s
+  Dataset: electricity, Ratio: 60%, ASR: 0.4000, Time: 426.39s
+  Dataset: water, Ratio: 80%, ASR: 0.2667, Time: 4.11s
+  Dataset: electricity, Ratio: 80%, ASR: 0.2000, Time: 555.25s
+  Average - ASR: 0.4333, Time: 184.93s
+
+household Strategy Results:
+  Dataset: water, Ratio: 20%, ASR: 0.5000, Time: 4.77s
+  Dataset: electricity, Ratio: 20%, ASR: 0.7000, Time: 165.83s
+  Dataset: water, Ratio: 40%, ASR: 0.7333, Time: 4.97s
+  Dataset: electricity, Ratio: 40%, ASR: 0.6667, Time: 297.57s
+  Dataset: water, Ratio: 60%, ASR: 0.5000, Time: 4.56s
+  Dataset: electricity, Ratio: 60%, ASR: 0.2000, Time: 272.04s
+  Dataset: water, Ratio: 80%, ASR: 0.1333, Time: 3.48s
+  Dataset: electricity, Ratio: 80%, ASR: 0.0667, Time: 544.62s
+  Average - ASR: 0.4375, Time: 162.23s
+
+random Strategy Results:
+  Dataset: water, Ratio: 20%, ASR: 0.7333, Time: 5.32s
+  Dataset: electricity, Ratio: 20%, ASR: 0.8333, Time: 165.89s
+  Dataset: water, Ratio: 40%, ASR: 0.6333, Time: 4.61s
+  Dataset: electricity, Ratio: 40%, ASR: 0.6000, Time: 297.55s
+  Dataset: water, Ratio: 60%, ASR: 0.2000, Time: 3.71s
+  Dataset: electricity, Ratio: 60%, ASR: 0.1333, Time: 407.61s
+  Dataset: water, Ratio: 80%, ASR: 0.0000, Time: 2.03s
+  Dataset: electricity, Ratio: 80%, ASR: 0.1000, Time: 363.20s
+  Average - ASR: 0.4042, Time: 156.24s

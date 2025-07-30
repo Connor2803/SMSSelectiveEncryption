@@ -368,6 +368,7 @@ func runOptimizationTest(testType string, params ckks.Parameters, dataset, strat
 	startTime := time.Now()
 
 	for t := 0; t < tLoop; t++ {
+		print(".")
 		if strategy == "entropy" {
 			processEntropy(fileList, params)
 		} else {
