@@ -81,11 +81,11 @@ type ResultKey struct {
 	EncryptionRatio      float64
 } // Struct to represent the unique identifier for a section/block.
 
-const DATASET_WATER = 1
+const DatasetWater = 1
 const DATASET_ELECTRICITY = 2
 
-const MAX_PARTY_ROWS = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
-const sectionSize = 1024     // Block Size: 2048 for summation correctness, 8192 for variance correctness
+const MaxPartyRows = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
+const sectionSize = 1024   // Block Size: 2048 for summation correctness, 8192 for variance correctness
 
 var currentDataset int // Water(1), Electricity(2)
 var maxHouseholdsNumber = 80
@@ -123,7 +123,7 @@ func main() {
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 
-	if currentDataset == DATASET_WATER {
+	if currentDataset == DatasetWater {
 		metricsOutputFileName = "./RL_model_V1_WATER/ML_metrics_WATER.csv"
 		partyMetricsOutputFileName = "./RL_model_V1_WATER/ML_party_metrics_WATER.csv"
 	} else {
@@ -158,10 +158,10 @@ func main() {
 	} else {
 		pathFormat = filepath.Join("examples", "datasets", "%s", "households_%d")
 	}
-	if currentDataset == DATASET_WATER {
-		path = fmt.Sprintf(pathFormat, "water", MAX_PARTY_ROWS)
+	if currentDataset == DatasetWater {
+		path = fmt.Sprintf(pathFormat, "water", MaxPartyRows)
 	} else {
-		path = fmt.Sprintf(pathFormat, "electricity", MAX_PARTY_ROWS)
+		path = fmt.Sprintf(pathFormat, "electricity", MaxPartyRows)
 	}
 
 	folder := filepath.Join(wd, path)
@@ -518,15 +518,15 @@ func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage
 	for pi, po := range P {
 		// Setup (rawInput, flags etc.)
 		partyRows, partyDates := parseCSV(po.filename)
-		if currentDataset == DATASET_WATER { // Reverse chronological order
+		if currentDataset == DatasetWater { // Reverse chronological order
 			for i, j := 0, len(partyRows)-1; i < j; i, j = i+1, j-1 {
 				partyRows[i], partyRows[j] = partyRows[j], partyRows[i]
 				partyDates[i], partyDates[j] = partyDates[j], partyDates[i]
 			}
 		}
 		lenPartyRows := len(partyRows)
-		if lenPartyRows > MAX_PARTY_ROWS {
-			lenPartyRows = MAX_PARTY_ROWS
+		if lenPartyRows > MaxPartyRows {
+			lenPartyRows = MaxPartyRows
 		}
 		if globalPartyRows == -1 {
 			sectionNum = lenPartyRows / sectionSize // sectionNum = 10, since lenPartyRows = 10240, sectionSize = 1024
@@ -568,7 +568,7 @@ func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage
 		expDeviation[pi] /= float64(globalPartyRows)
 
 		// Generate entropyMap
-		totalRecords := maxHouseholdsNumber * MAX_PARTY_ROWS
+		totalRecords := maxHouseholdsNumber * MaxPartyRows
 		for k, v := range frequencyMap {
 			possibility := float64(v) / float64(totalRecords)
 			entropyMap[k] = -possibility * math.Log2(possibility)
@@ -865,7 +865,7 @@ func getRandomStart(party int) int {
 	var randomStart int
 
 	for !valid {
-		randomStart = getRandom(MAX_PARTY_ROWS - atdSize)
+		randomStart = getRandom(MaxPartyRows - atdSize)
 		if !contains(party, randomStart) {
 			usedRandomStartPartyPairs[party] = append(usedRandomStartPartyPairs[party], randomStart)
 			valid = true
