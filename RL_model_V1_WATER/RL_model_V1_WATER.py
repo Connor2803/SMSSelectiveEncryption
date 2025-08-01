@@ -496,7 +496,7 @@ def main():
         print(f"Training started at: {time.ctime(start_time)}")
 
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
-        model.learn(total_timesteps=1000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
+        model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
         model.save("./RL_model_V1_WATER/DQN_Encryption_Ratio_Selector_V1")
 
         end_time = time.time()

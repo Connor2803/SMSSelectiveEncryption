@@ -828,10 +828,10 @@ func runReidentificationAttack(P []*Party, currentEncRatio float64) []float64 {
 
 func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccessNum int) {
 	attackSuccessNum = 0
-
-	var valid = false
 	var randomParty int
 	var randomStart int
+	var attackerDataBlock []float64
+	var valid = false
 
 	for !valid {
 		randomParty = getRandom(maxHouseholdsNumber)
@@ -839,19 +839,72 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 		if randomStart+leakedPlaintextSize > len(P[randomParty].rawInput) {
 			continue
 		}
-		var attackerDataBlock = P[randomParty].rawInput[randomStart : randomStart+leakedPlaintextSize]
+		attackerDataBlock = P[randomParty].rawInput[randomStart : randomStart+leakedPlaintextSize]
 		if uniqueDataBlock(P, attackerDataBlock, randomParty, randomStart, "rawInput") {
 			valid = true
 		}
 	}
 
-	var attackerDataBlock = P[randomParty].rawInput[randomStart : randomStart+leakedPlaintextSize]
+	isSourceIdentifiable := isPartyIdentifiable(P[randomParty], attackerDataBlock, currentEncRatio)
 
-	var matchedHouseholds = identifyParty(P, attackerDataBlock, randomParty, currentEncRatio)
-	if len(matchedHouseholds) == 1 && matchedHouseholds[0] == randomParty {
-		attackSuccessNum++
+	if !isSourceIdentifiable {
+		return 0
 	}
+
+	// If the source is identifiable, check if any other party could also be a match
+	matchedHouseholds := []int{randomParty} // Initialise array with leaked household.
+	for partyIdx, party := range P {
+		if partyIdx == randomParty {
+			continue
+		}
+		if isPartyIdentifiable(party, attackerDataBlock, currentEncRatio) {
+			matchedHouseholds = append(matchedHouseholds, partyIdx)
+		}
+	}
+
+	// A successful re-identification means only the original source was matched.
+	if len(matchedHouseholds) == 1 {
+		attackSuccessNum = 1
+	}
+
 	return
+}
+
+// Helper function to check if a single party can be identified with the leaked block.
+func isPartyIdentifiable(targetParty *Party, attackerPlaintextBlock []float64, currentEncRatio float64) bool {
+	minMatchCount := math.Ceil(float64(len(attackerPlaintextBlock)) * float64(minPercentMatched) / 100.0)
+	numEncryptedSections := int(currentEncRatio * float64(sectionNum))
+	firstPlaintextSection := numEncryptedSections
+
+	for s := firstPlaintextSection; s < sectionNum; s++ {
+		sectionStart := s * sectionSize
+		if sectionStart >= len(targetParty.plainInput) {
+			continue
+		}
+		sectionEnd := (s + 1) * sectionSize
+		if sectionEnd > len(targetParty.plainInput) {
+			sectionEnd = len(targetParty.plainInput)
+		}
+		targetSectionData := targetParty.plainInput[sectionStart:sectionEnd]
+
+		if len(targetSectionData) < len(attackerPlaintextBlock) {
+			continue // Section is too small
+		}
+
+		for i := 0; i <= len(targetSectionData)-len(attackerPlaintextBlock); i++ {
+			targetWindow := targetSectionData[i : i+len(attackerPlaintextBlock)]
+			matchCount := 0
+			for k := 0; k < len(attackerPlaintextBlock); k++ {
+				if math.Abs(attackerPlaintextBlock[k]-targetWindow[k]) < 1e-9 {
+					matchCount++
+				}
+			}
+			if float64(matchCount) >= minMatchCount {
+				return true // A match was found
+			}
+		}
+	}
+	return false // No match found in any plaintext section
 }
 
 // getRandomStart is a helper function that returns an unused random start block/section for the Party
@@ -918,111 +971,6 @@ func uniqueDataBlock(P []*Party, arr []float64, party int, index int, inputType 
 		}
 		if !unique {
 			break
-		}
-	}
-	return unique
-}
-
-func identifyParty(P []*Party, attackerPlaintextBlock []float64, originalPartyIdx int, currentEncRatio float64) []int {
-	var matchedHouseholds []int
-	firstPlaintextSection := int(math.Ceil(float64(sectionNum) * currentEncRatio))
-
-	// Match threshold: number of elements that must match.
-	minMatchCount := math.Ceil(float64(len(attackerPlaintextBlock)) * float64(minPercentMatched) / 100.0)
-
-	numEncryptedSections := int(currentEncRatio * float64(sectionNum))
-	firstPlaintextSection = numEncryptedSections
-
-	for targetPartyIdx, targetParty := range P {
-		for s := firstPlaintextSection; s < sectionNum; s++ {
-			sectionStart := s * sectionSize
-			if sectionStart >= len(targetParty.plainInput) {
-				continue
-			}
-			sectionEnd := (s + 1) * sectionSize
-			if sectionEnd > len(targetParty.plainInput) {
-				sectionEnd = len(targetParty.plainInput)
-			}
-			targetSectionData := targetParty.plainInput[sectionStart:sectionEnd]
-
-			if len(targetSectionData) < len(attackerPlaintextBlock) {
-				continue // Section is too small to contain the block.
-			}
-
-			// Attacker slides their block over the target's unencrypted section data.
-			for i := 0; i <= len(targetSectionData)-len(attackerPlaintextBlock); i++ {
-				targetWindow := targetSectionData[i : i+len(attackerPlaintextBlock)]
-
-				matchCount := 0
-				for k := 0; k < len(attackerPlaintextBlock); k++ {
-					if math.Abs(attackerPlaintextBlock[k]-targetWindow[k]) < 1e-9 {
-						matchCount++
-					}
-				}
-
-				if float64(matchCount) >= minMatchCount {
-					matchedHouseholds = append(matchedHouseholds, targetPartyIdx)
-					goto NextParty
-				}
-			}
-		}
-	NextParty:
-	}
-
-	// Deduplicate matched_households if a Party can be matched multiple times for unique IDs
-	uniqueMatches := make(map[int]bool)
-	var finalMatchedHouseholds []int
-	for _, id := range matchedHouseholds {
-		if !uniqueMatches[id] {
-			uniqueMatches[id] = true
-			finalMatchedHouseholds = append(finalMatchedHouseholds, id)
-		}
-	}
-
-	return finalMatchedHouseholds
-}
-
-// compareFloatSlices checks if two float64 slices are approximately equal within an epsilon.
-func compareFloatSlices(slice1, slice2 []float64, epsilon float64) bool {
-	if len(slice1) != len(slice2) {
-		return false
-	}
-	for i := 0; i < len(slice1); i++ {
-		if math.Abs(slice1[i]-slice2[i]) > epsilon {
-			return false
-		}
-	}
-	return true
-}
-
-// uniqueDataBlocks is a helper function that checks if the data blocks/sections is unique in the dataset.
-func uniqueDataBlocks(P []*Party, pos_matches [][]float64, party int, index int, min_length int, epsilon float64) bool {
-	var unique bool = true
-
-	for pn, po := range P {
-		if pn == party {
-			continue
-		}
-		for _, householdSection := range po.encryptedInput {
-			for i := 0; i <= len(householdSection)-min_length; i++ {
-				var target = householdSection[i : i+min_length]
-
-				for _, pos_match := range pos_matches {
-					if compareFloatSlices(target, pos_match, epsilon) {
-						unique = false
-						break // Exit inner loop (no need to check other pos_matches)
-					}
-				}
-				if !unique {
-					break // Break middle loop (no need to check other blocks in this section)
-				}
-			}
-			if !unique {
-				break // Break outer loop (no need to check other sections of this Party)
-			}
-		}
-		if !unique {
-			break // Break outermost loop (no need to check other parties)
 		}
 	}
 	return unique
