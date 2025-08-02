@@ -851,7 +851,7 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 		return 0
 	}
 
-	// If the source is identifiable, check if any other party could also be a match
+	// If the source is identifiable, check if any other party could also be a match.
 	matchedHouseholds := []int{randomParty} // Initialise array with leaked household.
 	for partyIdx, party := range P {
 		if partyIdx == randomParty {
