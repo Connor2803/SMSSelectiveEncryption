@@ -112,7 +112,7 @@ func main() {
 	choices, err := readRLChoices(rlChoicesPath)
 	check(err)
 	if len(choices) == 100 {
-		maxReidentificationAttempts = 30 // As validation and testing dataset much smaller.
+		maxReidentificationAttempts = 100 // As validation and testing dataset much smaller.
 	}
 
 	// 3. Load raw data from the master inputs.csv file

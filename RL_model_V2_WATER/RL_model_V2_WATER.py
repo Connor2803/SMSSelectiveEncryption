@@ -952,7 +952,7 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save("./RL_model_V2_ELECTRICITY/DQN_Encryption_Ratio_Selector_V2")
+    model.save("./RL_model_V2_WATER/DQN_Encryption_Ratio_Selector_V2")
 
     end_time_train = time.time()
     print(f"Training finished at: {time.ctime(end_time_train)}")
