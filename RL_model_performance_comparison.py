@@ -1,5 +1,5 @@
 # python ./RL_model_performance_comparison.py
-# NOTE: It takes about X hours for this code to run on an AMD Ryzen 5 55500U processor and 16GB RAM.
+# NOTE: It takes about 14 hours for this code to run on an AMD Ryzen 5 55500U processor and 16GB RAM.
 
 import subprocess
 import pandas as pd
