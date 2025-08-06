@@ -168,18 +168,18 @@ for attackBlockSize in attackBlockSizes:
         print(f"\n\n\n--- Starting Electricity Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
 
         try:
-            subprocess.run(["python", "./RL_model_V1-5_ELECTRICITY/RL_model_V1-5_ELECTRICITY.py", attackBlockSize])
+            subprocess.run(["python", "./RL_model_V1_5_ELECTRICITY/RL_model_V1_5_ELECTRICITY.py", attackBlockSize])
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: RL_model_V1-5_ELECTRICITY.py program failed with CalledProcessError: {e}")
+            print(f"ERROR: RL_model_V1_5_ELECTRICITY.py program failed with CalledProcessError: {e}")
             print(f"Stderr: {e.stderr}")
         except FileNotFoundError:
             print(f"WARNING: File not found, skipping run {curr_run + 1}")
             continue
 
         try:
-            electricity_v1_5_df = pd.read_csv("./RL_model_V1-5_ELECTRICITY/V1-5_testing_log_ELECTRICITY.csv")
+            electricity_v1_5_df = pd.read_csv("./RL_model_V1_5_ELECTRICITY/V1_5_testing_log_ELECTRICITY.csv")
         except FileNotFoundError:
-            print("ERROR: Could not find the log file: './RL_model_V1-5_ELECTRICITY/V1-5_testing_log_ELECTRICITY.csv'")
+            print("ERROR: Could not find the log file: './RL_model_V1_5_ELECTRICITY/V1_5_testing_log_ELECTRICITY.csv'")
             continue
 
         electricity_v1_5_df["HouseholdID"] = pd.Categorical(electricity_v1_5_df["HouseholdID"],
@@ -324,18 +324,18 @@ for attackBlockSize in attackBlockSizes:
         print(f"\n\n\n--- Starting Water Model V1.5, Run {curr_run + 1} with attackBlockSize:{attackBlockSize} ---")
 
         try:
-            subprocess.run(["python", "./RL_model_V1-5_WATER/RL_model_V1-5_WATER.py", attackBlockSize])
+            subprocess.run(["python", "./RL_model_V1_5_WATER/RL_model_V1_5_WATER.py", attackBlockSize])
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: RL_model_V1-5_WATER.py program failed with CalledProcessError: {e}")
+            print(f"ERROR: RL_model_V1_5_WATER.py program failed with CalledProcessError: {e}")
             print(f"Stderr: {e.stderr}")
         except FileNotFoundError:
             print(f"WARNING: File not found, skipping run {curr_run + 1}")
             continue
 
         try:
-            water_v1_5_df = pd.read_csv("./RL_model_V1-5_WATER/V1-5_testing_log_WATER.csv")
+            water_v1_5_df = pd.read_csv("./RL_model_V1_5_WATER/V1_5_testing_log_WATER.csv")
         except FileNotFoundError:
-            print("ERROR: Could not find the log file: './RL_model_V1-5_WATER/V1-5_testing_log_WATER.csv'")
+            print("ERROR: Could not find the log file: './RL_model_V1_5_WATER/V1_5_testing_log_WATER.csv'")
             continue
 
         water_v1_5_df["HouseholdID"] = pd.Categorical(water_v1_5_df["HouseholdID"],
