@@ -20,10 +20,10 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.dqn.policies import MultiInputPolicy
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-EXECUTABLE_NAME = "generate_metrics_v2"
+EXECUTABLE_NAME = "generate_metrics_V2"
 if sys.platform == "win32":
     EXECUTABLE_NAME += ".exe"
-GO_SOURCE_PATH = os.path.join(SCRIPT_DIR, "generate_metrics_v2.go")
+GO_SOURCE_PATH = os.path.join(SCRIPT_DIR, "generate_metrics_V2.go")
 GO_EXECUTABLE_PATH = os.path.join(SCRIPT_DIR, EXECUTABLE_NAME)
 print(f"\nGo executable path: {GO_EXECUTABLE_PATH}")
 print(f"\nGo source path: {GO_SOURCE_PATH}")

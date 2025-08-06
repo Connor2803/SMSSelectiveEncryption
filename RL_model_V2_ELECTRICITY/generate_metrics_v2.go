@@ -101,7 +101,7 @@ func getExecutableDir() string {
 func main() {
 	// 1. Get input file path and leakedPlaintextSize from command-line arguments.
 	if len(os.Args) < 3 {
-		log.Fatal("Usage: ./generate_metrics_v2 <path_to_rl_choices.json> <leakedPlaintextSize>")
+		log.Fatal("Usage: ./generate_metrics_V2 <path_to_rl_choices.json> <leakedPlaintextSize>")
 	}
 	rlChoicesPath := os.Args[1]
 	var err error
