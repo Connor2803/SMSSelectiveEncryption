@@ -1,6 +1,6 @@
 /*
 running command: // dataset
-go run .\RL_model_V1-5_ELECTRICITY\generate_metrics_V1-5.go 2 12
+go run .\RL_model_V1_5_ELECTRICITY\generate_metrics_V1_5.go 2 12
 > Run this code for the electricity dataset.
 */
 
@@ -123,11 +123,11 @@ func main() {
 	var partyMetricsOutputFileName string
 
 	if currentDataset == DatasetWater {
-		metricsOutputFileName = "./RL_model_V1-5_WATER/ML_metrics_WATER_v1-5.csv"
-		partyMetricsOutputFileName = "./RL_model_V1-5_WATER/ML_party_metrics_WATER_v1-5.csv"
+		metricsOutputFileName = "./RL_model_V1_5_WATER/ML_metrics_WATER_V1_5.csv"
+		partyMetricsOutputFileName = "./RL_model_V1_5_WATER/ML_party_metrics_WATER_V1_5.csv"
 	} else {
-		metricsOutputFileName = "./RL_model_V1-5_ELECTRICITY/ML_metrics_ELECTRICITY_v1-5.csv"
-		partyMetricsOutputFileName = "./RL_model_V1-5_ELECTRICITY/ML_party_metrics_ELECTRICITY_v1-5.csv"
+		metricsOutputFileName = "./RL_model_V1_5_ELECTRICITY/ML_metrics_ELECTRICITY_V1_5.csv"
+		partyMetricsOutputFileName = "./RL_model_V1_5_ELECTRICITY/ML_party_metrics_ELECTRICITY_V1_5.csv"
 	}
 	outputFile1, err := os.Create(metricsOutputFileName)
 	check(err)
