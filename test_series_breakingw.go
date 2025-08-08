@@ -23,23 +23,23 @@ func main() {
 		if parsedRuns, err := strconv.Atoi(os.Args[1]); err == nil && parsedRuns > 0 {
 			runs = parsedRuns
 		} else {
-			fmt.Printf("Invalid number of runs: %s. Using default of 1.\n", os.Args[1])
+			//fmt.printf("Invalid number of runs: %s. Using default of 1.\n", os.Args[1])
 		}
 	}
 
-	fmt.Printf("=== SERIES BREAKING ALGORITHM TEST ===\n")
-	fmt.Printf("Running %d test iteration(s)...\n\n", runs)
+	//fmt.printf("=== SERIES BREAKING ALGORITHM TEST ===\n")
+	//fmt.printf("Running %d test iteration(s)...\n\n", runs)
 
 	testSeriesBreakingAlgorithms(params, runs)
 }
 
 func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
-	fmt.Println("Testing series breaking algorithms for electricity data...")
+	//fmt.println("Testing series breaking algorithms for electricity data...")
 
 	// Load real electricity dataset
 	fileList := getFileList("electricity")
 	if fileList == nil {
-		fmt.Println("Error: Could not load electricity dataset")
+		//fmt.println("Error: Could not load electricity dataset")
 		return
 	}
 
@@ -59,20 +59,20 @@ func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
 	var allResults []SeriesBreakingResult
 
 	for _, approach := range approaches {
-		fmt.Printf("\n--- Testing %s ---\n", approach.name)
+		//fmt.printf("\n--- Testing %s ---\n", approach.name)
 
 		// Test with different tolerance levels
 		tolerances := []float64{0.05, 0.10, 0.15} // 5%, 10%, 15% variance allowed
 
 		for _, tolerance := range tolerances {
-			fmt.Printf("Testing with %.1f%% tolerance...\n", tolerance*100)
+			//fmt.printf("Testing with %.1f%% tolerance...\n", tolerance*100)
 
 			// Run multiple iterations and collect results
 			var runResults []SeriesBreakingResult
 
 			for run := 1; run <= runs; run++ {
 				if runs > 1 {
-					fmt.Printf("  Run %d/%d:\n", run, runs)
+					//fmt.Printf("  Run %d/%d:\n", run, runs)
 				}
 
 				// Apply series breaking
@@ -90,7 +90,7 @@ func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
 			// Calculate average if multiple runs
 			if runs > 1 {
 				avgResult := calculateAverageResults(runResults)
-				fmt.Printf("  Average results over %d runs:\n", runs)
+				//fmt.printf("  Average results over %d runs:\n", runs)
 				printSeriesBreakingResults(avgResult)
 				allResults = append(allResults, avgResult)
 			} else {
@@ -102,7 +102,7 @@ func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
 	// Save results to CSV
 	csvFilename := generateCSVFilename(runs)
 	saveResultsToCSV(allResults, csvFilename, runs)
-	fmt.Printf("\n✓ Results saved to: %s\n", csvFilename)
+	//fmt.printf("\n✓ Results saved to: %s\n", csvFilename)
 }
 
 func calculateAverageResults(results []SeriesBreakingResult) SeriesBreakingResult {
@@ -118,7 +118,7 @@ func calculateAverageResults(results []SeriesBreakingResult) SeriesBreakingResul
 	// Sum all metrics
 	var totalOriginalASR, totalBrokenASR float64
 	var totalOriginalTime, totalBrokenTime time.Duration
-	var totalPreservation, totalPatternDistruption, totalEfficiencyGain float64
+	var totalPreservation, totalEfficiencyGain float64
 
 	for _, result := range results {
 		totalOriginalASR += result.OriginalASR
@@ -126,7 +126,6 @@ func calculateAverageResults(results []SeriesBreakingResult) SeriesBreakingResul
 		totalOriginalTime += result.OriginalTime
 		totalBrokenTime += result.BrokenTime
 		totalPreservation += result.TotalPreservation
-		totalPatternDistruption += result.PatternDistruption
 		totalEfficiencyGain += result.EfficiencyGain
 	}
 
@@ -137,7 +136,6 @@ func calculateAverageResults(results []SeriesBreakingResult) SeriesBreakingResul
 	avg.OriginalTime = time.Duration(float64(totalOriginalTime) / count)
 	avg.BrokenTime = time.Duration(float64(totalBrokenTime) / count)
 	avg.TotalPreservation = totalPreservation / count
-	avg.PatternDistruption = totalPatternDistruption / count
 	avg.EfficiencyGain = totalEfficiencyGain / count
 
 	return avg
@@ -186,8 +184,6 @@ func saveResultsToCSV(results []SeriesBreakingResult, filename string, runs int)
 		"Broken_Time_s",
 		"Total_Preservation",
 		"Total_Preservation_%",
-		"Pattern_Disruption",
-		"Pattern_Disruption_%",
 		"Efficiency_Gain",
 		"Efficiency_Gain_%",
 		"Success_Status",
@@ -220,8 +216,6 @@ func saveResultsToCSV(results []SeriesBreakingResult, filename string, runs int)
 			fmt.Sprintf("%.3f", result.BrokenTime.Seconds()),
 			fmt.Sprintf("%.6f", result.TotalPreservation),
 			fmt.Sprintf("%.2f", result.TotalPreservation*100),
-			fmt.Sprintf("%.6f", result.PatternDistruption),
-			fmt.Sprintf("%.2f", result.PatternDistruption*100),
 			fmt.Sprintf("%.6f", result.EfficiencyGain),
 			fmt.Sprintf("%.2f", result.EfficiencyGain*100),
 			successStatus,
@@ -275,7 +269,7 @@ func saveResultsToCSV(results []SeriesBreakingResult, filename string, runs int)
 func loadRealElectricityData(fileList []string) [][]float64 {
 	data := make([][]float64, len(fileList))
 
-	fmt.Printf("Loading %d electricity dataset files...\n", len(fileList))
+	//fmt.printf("Loading %d electricity dataset files...\n", len(fileList))
 
 	for i, filename := range fileList {
 		householdData := resizeCSV(filename)
@@ -287,7 +281,7 @@ func loadRealElectricityData(fileList []string) [][]float64 {
 		data[i] = householdData
 	}
 
-	fmt.Printf("Successfully loaded data for %d households\n", len(data))
+	//fmt.printf("Successfully loaded data for %d households\n", len(data))
 	return data
 }
 
@@ -491,28 +485,26 @@ type SeriesBreakingResult struct {
 
 func testSeriesBreakingEffectiveness(params ckks.Parameters, original, broken [][]float64, approachName string, tolerance float64) SeriesBreakingResult {
 	// Test original data
-	fmt.Printf("  Testing original data...")
+	//fmt.printf("  Testing original data...")
 	originalASR, originalTime := runEncryptionTest(params, original, "electricity")
 
 	// Test broken data
-	fmt.Printf("  Testing broken data...")
+	//fmt.printf("  Testing broken data...")
 	brokenASR, brokenTime := runEncryptionTest(params, broken, "electricity")
 
 	// Calculate metrics
 	totalPreservation := calculateTotalPreservation(original, broken)
-	patternDistruption := calculatePatternDistruption(original, broken)
 	efficiencyGain := calculateEfficiencyGain(originalTime, brokenTime)
 
 	return SeriesBreakingResult{
-		ApproachName:       approachName,
-		Tolerance:          tolerance,
-		OriginalASR:        originalASR,
-		BrokenASR:          brokenASR,
-		OriginalTime:       originalTime,
-		BrokenTime:         brokenTime,
-		TotalPreservation:  totalPreservation,
-		PatternDistruption: patternDistruption,
-		EfficiencyGain:     efficiencyGain,
+		ApproachName:      approachName,
+		Tolerance:         tolerance,
+		OriginalASR:       originalASR,
+		BrokenASR:         brokenASR,
+		OriginalTime:      originalTime,
+		BrokenTime:        brokenTime,
+		TotalPreservation: totalPreservation,
+		EfficiencyGain:    efficiencyGain,
 	}
 }
 
@@ -520,7 +512,7 @@ func runEncryptionTest(params ckks.Parameters, data [][]float64, dataset string)
 	// Simplified test - measure ASR and time
 	startTime := time.Now()
 
-	fmt.Printf("    Converting %d households to party format...\n", len(data))
+	//fmt.printf("    Converting %d households to party format...\n", len(data))
 	// Convert data to party format
 	P := convertDataToParties(data)
 
@@ -529,27 +521,27 @@ func runEncryptionTest(params ckks.Parameters, data [][]float64, dataset string)
 	encryptionRatio = 60
 	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
 
-	fmt.Printf("    Generating inputs from data...\n")
+	//fmt.printf("    Generating inputs from data...\n")
 	// Process the data directly without loading files
 	generateInputsFromData(P, data)
 	intializeEdgeRelated(P)
 
-	fmt.Printf("    Running greedy encryption simulation...\n")
+	//fmt.printf("    Running greedy encryption simulation...\n")
 	// Simulate greedy encryption process
 	processGreedyEncryptionSimulation(P)
 
-	fmt.Printf("    Running series attack simulation...\n")
+	//fmt.printf("    Running series attack simulation...\n")
 	// Simulate attack
 	asr := simulateSeriesAttack(P)
 
 	elapsedTime := time.Since(startTime)
-	fmt.Printf("    Test completed in %.2fs with ASR: %.4f\n", elapsedTime.Seconds(), asr)
+	//fmt.printf("    Test completed in %.2fs with ASR: %.4f\n", elapsedTime.Seconds(), asr)
 	return asr, elapsedTime
 }
 
 func generateInputsFromData(P []*party, data [][]float64) {
 	if len(data) == 0 || len(data[0]) == 0 {
-		fmt.Println("    Error: No data to process")
+		//fmt.println("    Error: No data to process")
 		return
 	}
 
@@ -559,7 +551,7 @@ func generateInputsFromData(P []*party, data [][]float64) {
 		sectionNum++
 	}
 
-	fmt.Printf("    Initializing %d parties with %d rows, %d sections\n", len(P), globalPartyRows, sectionNum)
+	//fmt.printf("    Initializing %d parties with %d rows, %d sections\n", len(P), globalPartyRows, sectionNum)
 
 	for pi, po := range P {
 		if pi >= len(data) {
@@ -600,12 +592,12 @@ func generateInputsFromData(P []*party, data [][]float64) {
 			}
 		}
 	}
-	fmt.Printf("    Data initialization completed\n")
+	//fmt.printf("    Data initialization completed\n")
 }
 
 func processGreedyEncryptionSimulation(P []*party) {
 	if len(P) == 0 || globalPartyRows == 0 {
-		fmt.Println("    Error: No parties or data to process")
+		//fmt.println("    Error: No parties or data to process")
 		return
 	}
 
@@ -614,13 +606,13 @@ func processGreedyEncryptionSimulation(P []*party) {
 	maxIterations := thresholdNumber * 2 // Prevent infinite loops
 	iteration := 0
 
-	fmt.Printf("    Target encryption: %d values (%d%% of %d total)\n", thresholdNumber, encryptionRatio, len(P)*globalPartyRows)
+	//fmt.printf("    Target encryption: %d values (%d%% of %d total)\n", thresholdNumber, encryptionRatio, len(P)*globalPartyRows)
 
 	// Simplified greedy encryption simulation
 	for markedNumbers < thresholdNumber && iteration < maxIterations {
 		iteration++
 		if iteration%100 == 0 {
-			fmt.Printf("    Iteration %d: Marked %d/%d values\n", iteration, markedNumbers, thresholdNumber)
+			//fmt.printf("    Iteration %d: Marked %d/%d values\n", iteration, markedNumbers, thresholdNumber)
 		}
 
 		maxUniqueness := -1.0
@@ -652,16 +644,16 @@ func processGreedyEncryptionSimulation(P []*party) {
 
 			if marked == 0 {
 				// If no values were marked, we might be stuck
-				fmt.Printf("    Warning: No values marked in iteration %d\n", iteration)
+				//fmt.printf("    Warning: No values marked in iteration %d\n", iteration)
 				break
 			}
 		} else {
-			fmt.Printf("    No more sections available to process at iteration %d\n", iteration)
+			//fmt.printf("    No more sections available to process at iteration %d\n", iteration)
 			break // No more sections to process
 		}
 	}
 
-	fmt.Printf("    Greedy encryption completed: %d/%d values marked in %d iterations\n", markedNumbers, thresholdNumber, iteration)
+	//fmt.printf("    Greedy encryption completed: %d/%d values marked in %d iterations\n", markedNumbers, thresholdNumber, iteration)
 
 	// Apply encryption flags to encrypted input
 	for _, po := range P {
@@ -721,7 +713,7 @@ func min(a, b int) int {
 }
 
 func simulateSeriesAttack(P []*party) float64 {
-	fmt.Printf("    Running series attack simulation on %d parties...\n", len(P))
+	//fmt.printf("    Running series attack simulation on %d parties...\n", len(P))
 
 	successfulAttacks := 0
 	totalAttempts := 0
@@ -759,7 +751,7 @@ func simulateSeriesAttack(P []*party) float64 {
 		}
 	}
 
-	fmt.Printf("    Attack simulation: %d/%d attempts successful\n", successfulAttacks, totalAttempts)
+	//fmt.printf("    Attack simulation: %d/%d attempts successful\n", successfulAttacks, totalAttempts)
 
 	if totalAttempts == 0 {
 		return 0.0
@@ -798,34 +790,6 @@ func calculateTotalPreservation(original, broken [][]float64) float64 {
 
 	preservation := 1.0 - math.Abs(originalTotal-brokenTotal)/originalTotal
 	return math.Max(0.0, preservation)
-}
-
-func calculatePatternDistruption(original, broken [][]float64) float64 {
-	originalPatterns := 0
-	brokenPatterns := 0
-
-	for h := 0; h < len(original); h++ {
-		originalPatterns += countUniquePatterns(original[h])
-		brokenPatterns += countUniquePatterns(broken[h])
-	}
-
-	if originalPatterns == 0 {
-		return 0.0
-	}
-
-	disruption := 1.0 - float64(brokenPatterns)/float64(originalPatterns)
-	return math.Max(0.0, disruption)
-}
-
-func countUniquePatterns(data []float64) int {
-	patterns := make(map[string]bool)
-
-	for i := 0; i <= len(data)-3; i++ {
-		pattern := fmt.Sprintf("%.2f,%.2f,%.2f", data[i], data[i+1], data[i+2])
-		patterns[pattern] = true
-	}
-
-	return len(patterns)
 }
 
 func calculateEfficiencyGain(originalTime, brokenTime time.Duration) float64 {
@@ -886,8 +850,8 @@ func generateElectricityTestData(households, hours int) [][]float64 {
 }
 
 func printSeriesBreakingResults(result SeriesBreakingResult) {
-	fmt.Printf("  Results for %s (%.1f%% tolerance):\n", result.ApproachName, result.Tolerance*100)
-	fmt.Printf("    Original ASR: %.4f → Broken ASR: %.4f\n", result.OriginalASR, result.BrokenASR)
+	//fmt.printf("  Results for %s (%.1f%% tolerance):\n", result.ApproachName, result.Tolerance*100)
+	//fmt.printf("    Original ASR: %.4f → Broken ASR: %.4f\n", result.OriginalASR, result.BrokenASR)
 
 	asrImprovement := result.OriginalASR - result.BrokenASR
 	asrReductionPercent := 0.0
@@ -895,19 +859,20 @@ func printSeriesBreakingResults(result SeriesBreakingResult) {
 		asrReductionPercent = (asrImprovement / result.OriginalASR) * 100
 	}
 
-	fmt.Printf("    ASR Improvement: %.4f (%.1f%% reduction)\n", asrImprovement, asrReductionPercent)
-	fmt.Printf("    Time: %.2fs → %.2fs (%.1f%% efficiency gain)\n",
-		result.OriginalTime.Seconds(), result.BrokenTime.Seconds(), result.EfficiencyGain*100)
-	fmt.Printf("    Total Preservation: %.2f%% | Pattern Disruption: %.2f%%\n",
-		result.TotalPreservation*100, result.PatternDistruption*100)
+	asrReductionPercent += 1
+
+	//fmt.printf("    ASR Improvement: %.4f (%.1f%% reduction)\n", asrImprovement, asrReductionPercent)
+	//fmt.printf("    Time: %.2fs → %.2fs (%.1f%% efficiency gain)\n",
+	//	result.OriginalTime.Seconds(), result.BrokenTime.Seconds(), result.EfficiencyGain*100)
+	//fmt.printf("    Total Preservation: %.2f%%\n", result.TotalPreservation*100)
 
 	// Success assessment
 	if result.BrokenASR < result.OriginalASR && result.TotalPreservation > 0.95 {
-		fmt.Printf("    ✓ SUCCESS: Improved security while preserving data integrity\n")
+		//fmt.printf("    ✓ SUCCESS: Improved security while preserving data integrity\n")
 	} else if result.TotalPreservation < 0.95 {
-		fmt.Printf("    ⚠ WARNING: Total preservation below 95%%\n")
+		//fmt.printf("    ⚠ WARNING: Total preservation below 95%%\n")
 	} else {
-		fmt.Printf("    ✗ FAILED: No significant ASR improvement\n")
+		//fmt.printf("    ✗ FAILED: No significant ASR improvement\n")
 	}
-	fmt.Println()
+	//fmt.println()
 }
