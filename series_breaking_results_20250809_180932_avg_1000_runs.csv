@@ -1,0 +1,30 @@
+Series Breaking Algorithm Test Results
+Generated:,2025-08-09 18:09:32
+Test Runs:,1000
+Data Type:,"Real Electricity Consumption (80 households, 168 hours)"
+
+Approach,Tolerance_%,Original_ASR,Broken_ASR,ASR_Improvement,ASR_Reduction_%,Original_Time_s,Broken_Time_s,Total_Preservation,Total_Preservation_%,Efficiency_Gain,Efficiency_Gain_%,Success_Status
+Sliding Window Breaking,20.0,0.141274,0.118264,0.023010,16.29,1.045,1.044,0.997206,99.72,0.000305,0.03,SUCCESS
+Sliding Window Breaking,25.0,0.140867,0.113029,0.027838,19.76,1.041,1.040,0.995837,99.58,0.000722,0.07,SUCCESS
+Sliding Window Breaking,30.0,0.141156,0.108996,0.032160,22.78,1.040,1.039,0.994416,99.44,0.000997,0.10,SUCCESS
+Sliding Window Breaking,35.0,0.141420,0.108229,0.033191,23.47,1.040,1.039,0.993173,99.32,0.001002,0.10,SUCCESS
+Sliding Window Breaking,40.0,0.141205,0.107154,0.034051,24.11,1.040,1.039,0.991909,99.19,0.001122,0.11,SUCCESS
+Adaptive Pattern Breaking,20.0,0.141326,0.125015,0.016311,11.54,1.040,1.040,0.998267,99.83,0.000300,0.03,SUCCESS
+Adaptive Pattern Breaking,25.0,0.141478,0.120626,0.020852,14.74,1.040,1.039,0.997191,99.72,0.000734,0.07,SUCCESS
+Adaptive Pattern Breaking,30.0,0.141115,0.116622,0.024493,17.36,1.040,1.039,0.995778,99.58,0.000767,0.08,SUCCESS
+Adaptive Pattern Breaking,35.0,0.141178,0.112576,0.028602,20.26,1.039,1.038,0.993970,99.40,0.000938,0.09,SUCCESS
+Adaptive Pattern Breaking,40.0,0.141226,0.109330,0.031896,22.59,1.040,1.039,0.991851,99.19,0.000970,0.10,SUCCESS
+
+Summary Statistics:
+
+Sliding Window Breaking Summary:
+,Average ASR Improvement:,0.030050
+,Average Preservation:,99.45%
+,Average Efficiency Gain:,0.08%
+,Success Rate:,5/5 (100.0%)
+
+Adaptive Pattern Breaking Summary:
+,Average ASR Improvement:,0.024431
+,Average Preservation:,99.54%
+,Average Efficiency Gain:,0.07%
+,Success Rate:,5/5 (100.0%)
