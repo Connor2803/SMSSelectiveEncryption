@@ -964,21 +964,20 @@ def main():
 
     # ----- TRAINING PHASE ------
     print("\n----- TRAINING PHASE BEGIN ------")
-    start_time_train = time.time()
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
 
     logging_callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), './RL_model_V2_5_WATER/V2_5_training_log_global.csv'),
+        log_path_global_train=os.path.join(os.getcwd(), f'./RL_model_V2_5_WATER/V2_5_training_log_global_{currentLeakedPlaintextSize}.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
 
     convergence_callback = ConvergenceStoppingCallback(
-        check_freq=30000,  # How many timesteps before checking convergence? [Check every 50 episodes]
-        window_size=10,  # How many episodes to use to calculate the moving average reward? [Use last 10 episodes]
+        check_freq=300000,  # How many timesteps before checking convergence? [Check every 500 episodes]
+        window_size=100,  # How many episodes to use to calculate the moving average reward? [Use last 100 episodes]
         variance_threshold=0.1,
     )
 
@@ -986,37 +985,23 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save("./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5")
-
-    end_time_train = time.time()
-    print(f"Training finished at: {time.ctime(end_time_train)}")
-    elapsed_time_train = end_time_train - start_time_train
-    print(f"Total training duration: {elapsed_time_train:.2f} seconds")
+    model.save(f"./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5_{currentLeakedPlaintextSize}")
 
     del model
 
     # ----- VALIDATION PHASE ------
     print("\n----- VALIDATION PHASE BEGIN ------")
-    start_time_val = time.time()
 
-    model = DQN.load("./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5")
+    model = DQN.load(f"./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5_{currentLeakedPlaintextSize}")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
-
-    mean_reward, std_reward = evaluate_policy(model, env_val, render=False)
-    print(f"Validation mean reward: {mean_reward:.2f} +- {std_reward:.2f}")
-
-    end_time_val = time.time()
-    print(f"Validation finished at: {time.ctime(end_time_val)}")
-    elapsed_time_val = end_time_val - start_time_val
-    print(f"Total validation duration: {elapsed_time_val:.2f} seconds")
+    evaluate_policy(model, env_val, render=False)
 
     # ----- TESTING PHASE (Combined) ------
     print("\n----- TESTING PHASE (Combined) BEGIN ------")
-    start_time_combined = time.time()
 
-    model = DQN.load("./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5")
+    model = DQN.load(f"./RL_model_V2_5_WATER/DQN_Encryption_Ratio_Selector_V2_5_{currentLeakedPlaintextSize}")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test")
     model.set_env(env_test_combined)
 
@@ -1024,7 +1009,7 @@ def main():
         current_dataset_type="test_combined",
         log_path_global_train=None,
         log_path_global_test_ph=None,
-        log_path_global_test_combined=os.path.join(os.getcwd(), './RL_model_V2_5_WATER/V2_5_testing_log_combined.csv'),
+        log_path_global_test_combined=os.path.join(os.getcwd(), f'./RL_model_V2_5_WATER/V2_5_testing_log_combined_{currentLeakedPlaintextSize}.csv'),
         verbose=0
     )
     combined_test_callback.init_callback(model)
@@ -1045,13 +1030,7 @@ def main():
         combined_test_callback.locals = {'infos': [info], 'dones': [done], 'rewards': [reward]}
         combined_test_callback._on_step()
 
-    print(f"Combined test episode finished. Reward: {episode_reward:.2f}")
     combined_test_callback._on_training_end()
-
-    end_time_combined = time.time()
-    print(f"Testing (combined) finished at: {time.ctime(end_time_combined)}")
-    elapsed_time_combined = end_time_combined - start_time_combined
-    print(f"Total testing (combined) duration: {elapsed_time_combined:.2f} seconds")
 
     # # ----- TESTING PHASE (Per-Household) ------
     # print("\n----- TESTING PHASE (Per-Household) BEGIN ------")

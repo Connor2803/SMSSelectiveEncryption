@@ -1,5 +1,4 @@
 # python ./RL_model_performance_comparison.py
-# NOTE: It takes about 14 hours for this code to run on an AMD Ryzen 5 55500U processor and 16GB RAM.
 
 import subprocess
 import pandas as pd
@@ -8,7 +7,7 @@ import re
 from collections import defaultdict
 
 # GLOBAL VARIABLES
-number_of_runs = 3  # Number of times the RL model scripts are called.
+number_of_runs = 1  # Number of times the RL model scripts are called.
 attackBlockSizes = ["3", "6", "9", "12", "24", "36", "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker: "3", "6", "9", "12", "24", "36", "48"
 
 # The fixed 10 test households that will be compared across all RL models.
