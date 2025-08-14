@@ -531,7 +531,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
 
                 # 2. Run the Go program as a subprocess.
-                print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
+                # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
                     [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
@@ -602,7 +602,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # Add policy based hyperparameter training:
                 reid_penalty = 0
                 target_reid_rate = 0.1
-                penalty_multiplier = 500
+                penalty_multiplier = 700
 
                 if global_reidentification_rate > target_reid_rate:
                     reid_penalty += (global_reidentification_rate - target_reid_rate) * penalty_multiplier

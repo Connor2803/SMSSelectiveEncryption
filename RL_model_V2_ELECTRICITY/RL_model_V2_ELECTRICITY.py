@@ -516,7 +516,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # print(f"DEBUG: RL_choices.json created at {os.path.abspath(data_for_go_filepath)}")
 
                 # 2. Run the Go program as a subprocess.
-                print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
+                # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
                     [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
