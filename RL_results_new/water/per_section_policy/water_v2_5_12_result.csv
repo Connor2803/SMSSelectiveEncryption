@@ -1,0 +1,10 @@
+household_id,Average Encryption Ratio,Standard Deviation Encryption Ratio,Average Reidentification Rate,Standard Deviation Reidentification Rate,Average Advanced Reidentification Rate,Standard Deviation Advance Reidentification Rate,Reidentification Duration (NS)_mean,Reidentification Duration (NS)_std,Average Memory Consumption,Standard Deviation Memory Consumption,Average Summation Error,Standard Deviation Summation Error,Average Deviation Error,Standard Deviation Deviation Error,Average Encryption Time,Standard Deviation Encryption Time,Average Decryption Time,Standard Deviation Decryption Time,Average Summation Operations Time,Standard Deviation Summation Operations Time,Average Deviation Operations Time,Standard Deviation Deviation Operations Time
+e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv,0.5,,0.001,,0.0,,3911227.0,,6.0,,93904.769231,,273.067587,,13265900.0,,0.0,,10078700.0,,4577700.0,
+e363b1f3-f503-48b4-b87c-98fe07632c02.csv,0.52,,0.001,,0.0,,3911227.0,,6.0,,58.0,,2.741505,,3361100.0,,0.0,,0.0,,10087200.0,
+e41dddd2-87dd-4d4b-bdb6-9859c34768f1.csv,0.55,,0.001,,0.0,,3911227.0,,6.0,,17566.461538,,83.407333,,0.0,,0.0,,0.0,,0.0,
+e76658cf-88ea-4123-8715-0248909dd88b.csv,0.5,,0.001,,0.0,,3911227.0,,6.0,,59293.384615,,172.353797,,7344700.0,,0.0,,0.0,,0.0,
+f12f91f7-81ca-4b7c-a5e8-3b81c4e5720b.csv,0.5,,0.001,,0.0,,3911227.0,,6.0,,55473.846154,,188.476804,,7530500.0,,0.0,,0.0,,4030000.0,
+f45ff6bf-08c4-450d-bbf3-5597f66c68ba.csv,0.5,,0.001,,0.0,,3911227.0,,6.0,,51168.076923,,153.727678,,2625600.0,,0.0,,0.0,,0.0,
+f5850315-552a-440f-9871-173212ad467f.csv,0.52,,0.001,,0.0,,3911227.0,,6.0,,64972.0,,182.685973,,7095800.0,,0.0,,0.0,,0.0,
+f5a28746-11f7-423f-9ae0-204a9b6d50ac.csv,0.5,,0.001,,0.0,,3911227.0,,6.0,,43340.769231,,127.594409,,0.0,,0.0,,0.0,,0.0,
+faea8eb7-c134-4c8b-99ac-c2c7ddd60d8b.csv,0.53,,0.001,,0.0,,3911227.0,,6.0,,22267.307692,,71.674618,,8570100.0,,0.0,,0.0,,0.0,

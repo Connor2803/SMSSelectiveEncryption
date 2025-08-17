@@ -602,7 +602,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # Add policy-based hyperparameter training:
                 reid_penalty = 0
                 target_reid_rate = 0.1
-                penalty_multiplier = 600
+                penalty_multiplier = 700
 
                 if global_reidentification_rate > target_reid_rate:
                     reid_penalty += (global_reidentification_rate - target_reid_rate) * penalty_multiplier
