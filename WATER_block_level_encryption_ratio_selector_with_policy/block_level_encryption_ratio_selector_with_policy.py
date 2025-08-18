@@ -946,7 +946,7 @@ class ConvergenceStoppingCallback(BaseCallback):
 
 def main():
     if len(sys.argv) != 3:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and policy penalty.")
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and policy penalty as arguments.")
         current_leaked_plaintext_size = "12"
         current_policy_penalty = 500
     else:

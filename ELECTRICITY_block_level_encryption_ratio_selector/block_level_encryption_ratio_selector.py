@@ -914,10 +914,10 @@ class ConvergenceStoppingCallback(BaseCallback):
 
 def main():
     if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
-        currentLeakedPlaintextSize = "12"
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size as an argument.")
+        current_leaked_plaintext_size = "12"
     else:
-        currentLeakedPlaintextSize = sys.argv[1]
+        current_leaked_plaintext_size = sys.argv[1]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -936,7 +936,7 @@ def main():
 
     logging_callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), f'./ELECTRICITY_block_level_encryption_ratio_selector/training_log_{currentLeakedPlaintextSize}.csv'),
+        log_path_global_train=os.path.join(os.getcwd(), f'./ELECTRICITY_block_level_encryption_ratio_selector/training_log_{current_leaked_plaintext_size}.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
@@ -951,13 +951,13 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model.save(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
     del model
 
     # ----- VALIDATION PHASE ------
     print("\n----- VALIDATION PHASE BEGIN ------")
 
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -967,7 +967,7 @@ def main():
     # ----- TESTING PHASE (Combined) ------
     print("\n----- TESTING PHASE (Combined) BEGIN ------")
 
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test")
     model.set_env(env_test_combined)
 
@@ -976,7 +976,7 @@ def main():
         log_path_global_train=None,
         log_path_global_test_ph=None,
         log_path_global_test_combined=os.path.join(os.getcwd(),
-                                                   f'./ELECTRICITY_block_level_encryption_ratio_selector/testing_log_{currentLeakedPlaintextSize}.csv'),
+                                                   f'./ELECTRICITY_block_level_encryption_ratio_selector/testing_log_{current_leaked_plaintext_size}.csv'),
         verbose=0
     )
     combined_test_callback.init_callback(model)

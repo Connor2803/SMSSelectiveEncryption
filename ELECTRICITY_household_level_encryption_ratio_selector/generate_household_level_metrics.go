@@ -1,6 +1,6 @@
 /*
-running command: // dataset
-go run .\ELECTRICITY_household_level_encryption_selector\generate_household_level_metrics.go 2 12
+running command: // dataset, leaked plaintext size
+go run .\ELECTRICITY_household_level_encryption_ratio_selector\generate_household_level_metrics.go 2 12
 > Run this code for the electricity dataset.
 */
 
@@ -123,11 +123,11 @@ func main() {
 	var partyMetricsOutputFileName string
 
 	if currentDataset == DatasetWater {
-		metricsOutputFileName = "./WATER_household_level_encryption_selector_model/ML_metrics_WATER.csv"
-		partyMetricsOutputFileName = "./WATER_household_level_encryption_selector_model/ML_party_metrics_WATER.csv"
+		metricsOutputFileName = "./WATER_household_level_encryption_ratio_selector_model/ML_metrics_WATER.csv"
+		partyMetricsOutputFileName = "./WATER_household_level_encryption_ratio_selector_model/ML_party_metrics_WATER.csv"
 	} else {
-		metricsOutputFileName = "./ELECTRICITY_household_level_encryption_selector/ML_metrics_ELECTRICITY.csv"
-		partyMetricsOutputFileName = "./ELECTRICITY_household_level_encryption_selector/ML_party_metrics_ELECTRICITY.csv"
+		metricsOutputFileName = "./ELECTRICITY_household_level_encryption_ratio_selector/ML_metrics_ELECTRICITY.csv"
+		partyMetricsOutputFileName = "./ELECTRICITY_household_level_encryption_ratio_selector/ML_party_metrics_ELECTRICITY.csv"
 	}
 	outputFile1, err := os.Create(metricsOutputFileName)
 	check(err)
@@ -627,7 +627,7 @@ func calculateEntropy(data []float64) float64 {
 
 func doHomomorphicOperations(params ckks.Parameters, P []*Party, expSummation, expAverage, expDeviation, plainSum []float64) (summationErrors []float64, deviationErrors []float64, encryptionTimes []int64, decryptionTimes []int64, summationOperationTimes []int64, deviationOperationTimes []int64) {
 
-	// Initialize new slices for per-party times.
+	// Initialise new slices for per-party times.
 	summationErrors = make([]float64, len(P))
 	deviationErrors = make([]float64, len(P))
 	encryptionTimes = make([]int64, len(P))

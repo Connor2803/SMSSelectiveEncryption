@@ -1,6 +1,6 @@
 /*
-running command: // dataset
-go run .\WATER_household_level_encryption_selector\generate_household_level_metrics.go 1
+running command: // dataset, leaked plaintext size
+go run .\WATER_household_level_encryption_ratio_selector\generate_household_level_metrics.go 1 12
 > Run this code for the water dataset.
 */
 
@@ -10,9 +10,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/tuneinsight/lattigo/v4/ckks"
-	"github.com/tuneinsight/lattigo/v4/drlwe"
-	"github.com/tuneinsight/lattigo/v4/rlwe"
 	utils "lattigo"
 	"math"
 	"math/rand"
@@ -23,6 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/drlwe"
+	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
 func bToMb(b uint64) uint64 {
@@ -122,12 +123,16 @@ func main() {
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 
+	exePath, err := os.Executable()
+	check(err)
+	exeDir := filepath.Dir(exePath)
+
 	if currentDataset == DatasetWater {
-		metricsOutputFileName = "./WATER_household_level_encryption_selector/ML_metrics_WATER.csv"
-		partyMetricsOutputFileName = "./WATER_household_level_encryption_selector/ML_party_metrics.csv"
+		metricsOutputFileName = filepath.Join(exeDir, "ML_metrics_WATER.csv")
+		partyMetricsOutputFileName = filepath.Join(exeDir, "ML_party_metrics_WATER.csv")
 	} else {
-		metricsOutputFileName = "./ELECTRICITY_household_level_encryption_selector/ML_metrics_ELECTRICITY.csv"
-		partyMetricsOutputFileName = "./ELECTRICITY_household_level_encryption_selector/ML_party_metrics_ELECTRICITY.csv"
+		metricsOutputFileName = filepath.Join(exeDir, "ML_metrics_ELECTRICITY.csv")
+		partyMetricsOutputFileName = filepath.Join(exeDir, "ML_party_metrics_ELECTRICITY.csv")
 	}
 	outputFile1, err := os.Create(metricsOutputFileName)
 	check(err)

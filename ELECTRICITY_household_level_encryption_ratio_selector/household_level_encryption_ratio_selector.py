@@ -50,7 +50,7 @@ class EncryptionSelectorEnv(gym.Env):
         ]
         unique_household_IDs = ordered_unique_household_IDs
 
-        # Create permanent testing household subset for comparative performance analysis.
+        # Create a permanent testing household subset for comparative performance analysis.
         permanent_testing_IDs = unique_household_IDs[-10:]
         unique_household_IDs = unique_household_IDs[:-10]
 
@@ -424,10 +424,10 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
 
 def main():
     if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
-        currentAtdSize = "12"
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size as an argument.")
+        current_leaked_plaintext_size = "12"
     else:
-        currentAtdSize = sys.argv[1]
+        current_leaked_plaintext_size = sys.argv[1]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -438,9 +438,9 @@ def main():
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
-    print(f"Running Go metrics generator with atdSize = {currentAtdSize}...")
+    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
     try:
-        run_args = [GO_EXECUTABLE_PATH, "2", currentAtdSize]
+        run_args = [GO_EXECUTABLE_PATH, "2", current_leaked_plaintext_size]
         subprocess.run(run_args,
                        check=True,
                        capture_output=True,
@@ -456,7 +456,7 @@ def main():
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     # Training file log creation
-    log_file_name = f"./ELECTRICITY_household_level_encryption_ratio_selector/training_log_{currentAtdSize}.csv"
+    log_file_name = f"./ELECTRICITY_household_level_encryption_ratio_selector/training_log_{current_leaked_plaintext_size}.csv"
     csv_file = None
     csv_writer = None
 
@@ -495,7 +495,7 @@ def main():
 
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
         model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
-        model.save(f"./ELECTRICITY_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{currentAtdSize}")
+        model.save(f"./ELECTRICITY_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{current_leaked_plaintext_size}")
 
         end_time = time.time()
         print(f"Training finished at: {time.ctime(end_time)}")
@@ -539,7 +539,7 @@ def main():
 
     # ----- VALIDATION PHASE ------
     print("\n--- Starting Validation ---")
-    model = DQN.load(f"./ELECTRICITY_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{currentAtdSize}")
+    model = DQN.load(f"./ELECTRICITY_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{current_leaked_plaintext_size}")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -572,7 +572,7 @@ def main():
     env_test = EncryptionSelectorEnv(dataset_type="test")
     testing_households = env_test._active_households.copy()
 
-    with open(f"./ELECTRICITY_household_level_encryption_ratio_selector/testing_log_{currentAtdSize}", "w", newline="") as file:
+    with open(f"./ELECTRICITY_household_level_encryption_ratio_selector/testing_log_{current_leaked_plaintext_size}.csv", "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(log_headers)
 
@@ -583,10 +583,8 @@ def main():
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info_step = env_test.step(action)
 
-            print(
-                f"Tested Household: {household_id}, Chosen Ratio: {info_step.get("selected_encryption_ratio")}, Reward: {reward:.4f}")
-
             log_to_csv(writer, i + 1, household_id, reward, info_step)
+    print("Testing finished.\n")
 
 if __name__ == "__main__":
     main()

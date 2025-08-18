@@ -1,4 +1,4 @@
-# python ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py
+# python ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py 12
 import os
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -32,11 +32,14 @@ class EncryptionSelectorEnv(gym.Env):
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # Read the ML metrics CSV file for Water dataset.
-        df = pd.read_csv("./WATER_household_level_encryption_ratio_selector/ML_metrics_WATER.csv", header=0)
-        df_HE = pd.read_csv("./WATER_household_level_encryption_ratio_selector/ML_party_metrics_WATER.csv", header=0)
+        metrics_path = os.path.join(SCRIPT_DIR, "ML_metrics_WATER.csv")
+        df = pd.read_csv(metrics_path, header=0)
+
+        he_metrics_path = os.path.join(SCRIPT_DIR, "ML_party_metrics_WATER.csv")
+        df_HE = pd.read_csv(he_metrics_path, header=0)
 
         # Retrieve the unique household IDs from the Water dataset.
-        water_households_data_folder_path = "./examples/datasets/water/households_10240"
+        water_households_data_folder_path = os.path.join(os.path.dirname(SCRIPT_DIR), 'examples', 'datasets', 'water', 'households_10240')
         try:
             folder_filenames_raw = os.listdir(water_households_data_folder_path)
             folder_filenames_sorted = sorted(folder_filenames_raw)  # Sorted alphabetically.
@@ -50,7 +53,7 @@ class EncryptionSelectorEnv(gym.Env):
         ]
         unique_household_IDs = ordered_unique_household_IDs
 
-        # Create permanent testing household subset for comparative performance analysis.
+        # Create a permanent testing household subset for comparative performance analysis.
         permanent_testing_IDs = unique_household_IDs[-10:]
         unique_household_IDs = unique_household_IDs[:-10]
 
@@ -423,10 +426,10 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
 
 def main():
     if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
-        currentAtdSize = "12"
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size as an argument.")
+        current_leaked_plaintext_size = "12"
     else:
-        currentAtdSize = sys.argv[1]
+        current_leaked_plaintext_size = sys.argv[1]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -437,9 +440,9 @@ def main():
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
-    print(f"Running Go metrics generator with atdSize = {currentAtdSize}...")
+    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
     try:
-        run_args = [GO_EXECUTABLE_PATH, "1", currentAtdSize]
+        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
         subprocess.run(run_args,
                        check=True,
                        capture_output=True,
@@ -455,7 +458,7 @@ def main():
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     # Training file log creation
-    log_file_name = f"./WATER_household_level_encryption_ratio_selector/training_log_{currentAtdSize}.csv"
+    log_file_name = f"./WATER_household_level_encryption_ratio_selector/training_log_{current_leaked_plaintext_size}.csv"
     csv_file = None
     csv_writer = None
 
@@ -489,17 +492,9 @@ def main():
              "Deviation Operations Time",
              ])
 
-        start_time = time.time()
-        print(f"Training started at: {time.ctime(start_time)}")
-
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
         model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
-        model.save(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{currentAtdSize}")
-
-        end_time = time.time()
-        print(f"Training finished at: {time.ctime(end_time)}")
-        elapsed_time = end_time - start_time
-        print(f"Total training duration: {elapsed_time:.2f} seconds")
+        model.save(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
 
     except Exception as e:
         print(f"An error occurred during training: {e}")
@@ -538,7 +533,7 @@ def main():
 
     # ----- VALIDATION PHASE ------
     print("\n--- Starting Validation ---")
-    model = DQN.load(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{currentAtdSize}")
+    model = DQN.load(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -571,7 +566,7 @@ def main():
     env_test = EncryptionSelectorEnv(dataset_type="test")
     testing_households = env_test._active_households.copy()
 
-    with open(f"./WATER_household_level_encryption_ratio_selector/testing_log.csv_{currentAtdSize}.csv", "w", newline="") as file:
+    with open(f"./WATER_household_level_encryption_ratio_selector/testing_log.csv_{current_leaked_plaintext_size}.csv", "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(log_headers)
 
@@ -582,10 +577,9 @@ def main():
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info_step = env_test.step(action)
 
-            print(
-                f"Tested Household: {household_id}, Chosen Ratio: {info_step.get("selected_encryption_ratio")}, Reward: {reward:.4f}")
-
             log_to_csv(writer, i + 1, household_id, reward, info_step)
+
+    print("Testing finished.\n")
 
 if __name__ == "__main__":
     main()
