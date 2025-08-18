@@ -1,4 +1,4 @@
-# python ./WATER_block_level_encryption_ratio_selector_with_policy/block_level_encryption_ratio_selector_with_policy.py
+# python ./WATER_block_level_encryption_ratio_selector_with_policy/block_level_encryption_ratio_selector_with_policy.py <leakedPlaintextSize> <policyPenalty>
 
 import csv
 import json
@@ -27,9 +27,6 @@ GO_SOURCE_PATH = os.path.join(SCRIPT_DIR, "generate_block_level_policy_metrics.g
 GO_EXECUTABLE_PATH = os.path.join(SCRIPT_DIR, EXECUTABLE_NAME)
 print(f"\nGo executable path: {GO_EXECUTABLE_PATH}")
 print(f"\nGo source path: {GO_SOURCE_PATH}")
-
-currentLeakedPlaintextSize = "12"
-
 
 class Welford:
     def __init__(self):
@@ -208,9 +205,10 @@ class Welford:
 
 
 class EncryptionSelectorEnv(gym.Env):
-    def __init__(self, dataset_type: str):
+    def __init__(self, dataset_type: str, policy_penalty: int):
         super().__init__()
         self._welford = Welford()
+        self._policy_penalty = policy_penalty
 
         self._encryption_ratios = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
@@ -599,10 +597,10 @@ class EncryptionSelectorEnv(gym.Env):
                 # Utility cost = errors + computation time
                 utility_cost = z_sum_error + z_dev_error + z_enc_time + z_sum_ops_time + z_dev_ops_time + z_memory + z_avg_encryption_ratio
 
-                # Add policy based hyperparameter training:
+                # Add policy-based hyperparameter training:
                 reid_penalty = 0
                 target_reid_rate = 0.1
-                penalty_multiplier = 700
+                penalty_multiplier = self._policy_penalty
 
                 if global_reidentification_rate > target_reid_rate:
                     reid_penalty += (global_reidentification_rate - target_reid_rate) * penalty_multiplier
@@ -947,11 +945,13 @@ class ConvergenceStoppingCallback(BaseCallback):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the atdSize.")
-        currentLeakedPlaintextSize = "12"
+    if len(sys.argv) != 3:
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and policy penalty.")
+        current_leaked_plaintext_size = "12"
+        current_policy_penalty = 500
     else:
-        currentLeakedPlaintextSize = sys.argv[1]
+        current_leaked_plaintext_size = sys.argv[1]
+        current_policy_penalty = int(sys.argv[2])
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -964,13 +964,13 @@ def main():
 
     # ----- TRAINING PHASE ------
     print("\n----- TRAINING PHASE BEGIN ------")
-    env_train = EncryptionSelectorEnv(dataset_type="train")
+    env_train = EncryptionSelectorEnv(dataset_type="train", policy_penalty=current_policy_penalty)
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
 
     logging_callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), f'./WATER_block_level_encryption_ratio_selector_with_policy/training_log_{currentLeakedPlaintextSize}.csv'),
+        log_path_global_train=os.path.join(os.getcwd(), f'./WATER_block_level_encryption_ratio_selector_with_policy/training_log_{current_leaked_plaintext_size}_{current_policy_penalty}.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
@@ -985,14 +985,14 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model.save(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
 
     del model
 
     # ----- VALIDATION PHASE ------
     print("\n----- VALIDATION PHASE BEGIN ------")
 
-    model = DQN.load(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model = DQN.load(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -1001,7 +1001,7 @@ def main():
     # ----- TESTING PHASE (Combined) ------
     print("\n----- TESTING PHASE (Combined) BEGIN ------")
 
-    model = DQN.load(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{currentLeakedPlaintextSize}")
+    model = DQN.load(f"./WATER_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test")
     model.set_env(env_test_combined)
 
@@ -1009,7 +1009,7 @@ def main():
         current_dataset_type="test_combined",
         log_path_global_train=None,
         log_path_global_test_ph=None,
-        log_path_global_test_combined=os.path.join(os.getcwd(), f'./WATER_block_level_encryption_ratio_selector_with_policy/testing_log_{currentLeakedPlaintextSize}.csv'),
+        log_path_global_test_combined=os.path.join(os.getcwd(), f'./WATER_block_level_encryption_ratio_selector_with_policy/testing_log_{current_leaked_plaintext_size}_{current_policy_penalty}.csv'),
         verbose=0
     )
     combined_test_callback.init_callback(model)

@@ -602,14 +602,14 @@ def main():
         # water_per_household_analysis = test_analysis(all_water_per_household_run_data)
         # basic_printing_func(analysis_dict=water_per_household_analysis, model_complexity="per_household", dataset="WATER", attack_block_size=attack_block_size)
 
-        # all_electricity_per_block_run_data = {hh: [] for hh in electricity_test_households}
-        # for i in range(number_of_runs):
-        #     run_data = run_electricity_per_block(attack_block_size=attack_block_size)
-        #     all_electricity_per_block_run_data.update(run_data)
-        #
-        # electricity_per_block_analysis = per_block_analysis(all_runs_data=all_electricity_per_block_run_data)
-        # advanced_printing_func(analysis_dict=electricity_per_block_analysis, model_complexity="per_block",
-        #                     dataset="ELECTRICITY", attack_block_size=attack_block_size)
+        all_electricity_per_block_run_data = {hh: [] for hh in electricity_test_households}
+        for i in range(number_of_runs):
+            run_data = run_electricity_per_block(attack_block_size=attack_block_size)
+            all_electricity_per_block_run_data.update(run_data)
+
+        electricity_per_block_analysis = per_block_analysis(all_runs_data=all_electricity_per_block_run_data)
+        advanced_printing_func(analysis_dict=electricity_per_block_analysis, model_complexity="per_block",
+                            dataset="ELECTRICITY", attack_block_size=attack_block_size)
 
         # all_water_per_block_run_data = {hh: [] for hh in water_test_households}
         # for i in range(number_of_runs):
@@ -640,3 +640,5 @@ def main():
         #                     dataset="WATER", attack_block_size=attack_block_size)
 
 
+if __name__ == "__main__":
+    main()
