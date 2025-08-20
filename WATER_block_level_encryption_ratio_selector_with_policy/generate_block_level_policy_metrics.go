@@ -856,7 +856,6 @@ func logAttackDetailsToFile(filename, attackType, sourcePartyID string, sourceSe
 		sb.WriteString(fmt.Sprintf("  - Encrypted Readings (%d values): %v\n\n", len(section.encryptedReadings), section.encryptedReadings))
 	}
 
-	// Write to file
 	err := os.WriteFile(filename, []byte(sb.String()), 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: Failed to write attack log to file %s: %v\n", filename, err)

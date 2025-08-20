@@ -1,6 +1,6 @@
 /*
-running command: // dataset
-go run .\test_model_water\generate_test_metrics.go 1
+running command: // dataset, atdSize
+go run .\test_model_water\generate_test_metrics.go 1 12
 > Run this code for the Water dataset.
 */
 
@@ -10,9 +10,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/tuneinsight/lattigo/v4/ckks"
-	"github.com/tuneinsight/lattigo/v4/drlwe"
-	"github.com/tuneinsight/lattigo/v4/rlwe"
 	utils "lattigo"
 	"math"
 	"math/rand"
@@ -23,6 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/drlwe"
+	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
 func bToMb(b uint64) uint64 {
@@ -53,7 +54,7 @@ type Party struct {
 	rawInput       []float64   // All data
 	rawDates       []string    // All dates corresponding to rawInput
 	input          [][]float64 // Encryption data
-	plainInput     []float64   // Plaintext data
+	plainInput     [][]float64 // Plaintext data
 	flag           []int       // Slice to track which sections have been encrypted
 	group          []int
 	entropy        []float64   // Entropy for block
@@ -316,11 +317,11 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		for pi, po := range P {
 			po.input = make([][]float64, 0)
-			po.plainInput = make([]float64, 0)
+
+			totalSections := len(po.rawInput) / sectionSize
+			po.plainInput = make([][]float64, totalSections)
 
 			numHESections := int(float64(sectionNum) * encRatio)
-			totalSections := len(po.rawInput) / sectionSize
-
 			heInputDataFlat := []float64{}
 
 			for s := 0; s < totalSections; s++ {
@@ -335,9 +336,11 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 					// This section goes to HE
 					po.input = append(po.input, currentSectionData)
 					heInputDataFlat = append(heInputDataFlat, currentSectionData...)
+					po.flag[s] = 1
 				} else {
 					// This section goes to plaintext
-					po.plainInput = append(po.plainInput, currentSectionData...)
+					po.plainInput[s] = currentSectionData
+					po.flag[s] = 0
 
 				}
 			}
@@ -349,8 +352,10 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 			_, _, expDeviationForRatio[pi] = calculateStandardDeviationAndMeanAndVariance(heInputDataFlat)
 
 			var currentPlainSum float64
-			for _, val := range po.plainInput {
-				currentPlainSum += val
+			for _, section := range po.plainInput {
+				for _, reading := range section {
+					currentPlainSum += reading
+				}
 			}
 			plainSum[pi] = currentPlainSum
 		}
@@ -991,10 +996,12 @@ func identifyParty(P []*Party, attackerRawBlock []float64, originalPartyIdx int,
 					if uniqueATD == 0 {
 						if uniqueDataBlocks(P, [][]float64{candidateEncryptedBlock}, partyIdx, startOffset, min_length, epsilon) {
 							matched_households = append(matched_households, partyIdx)
+							logAttackDetailsToFile("test_model_water_attack_details", "ciphertext_uniqueness", currentEncRatio, strconv.Itoa(partyIdx), sectionIdx, simulatedEncryptedBlock, currentParty, 1)
 							goto NextParty // Found a unique match for this party, move to next party
 						}
 					} else {
 						matched_households = append(matched_households, partyIdx)
+						logAttackDetailsToFile("test_model_water_attack_details", "ciphertext_uniqueness", currentEncRatio, strconv.Itoa(partyIdx), sectionIdx, simulatedEncryptedBlock, currentParty, 1)
 						goto NextParty // Found a match, move to next party
 					}
 				}
@@ -1080,4 +1087,41 @@ func calculateStandardDeviationAndMeanAndVariance(numbers []float64) (standardDe
 	standardDeviation = math.Sqrt(variance)
 
 	return standardDeviation, mean, variance
+}
+
+func logAttackDetailsToFile(filename string, attackType string, encryptionRatio float64, sourcePartyID string, sourceSectionIndex int, attackerBlock []float64, sourceParty *Party, result int) {
+	var sb strings.Builder
+
+	resultStr := "FAILURE"
+	if result == 1 {
+		resultStr = "SUCCESS"
+	}
+
+	sb.WriteString("=====================================================\n")
+	sb.WriteString(fmt.Sprintf("         %s Attack Verification Log for Encryption Ratio: %d\n", attackType, encryptionRatio))
+	sb.WriteString("=====================================================\n\n")
+
+	sb.WriteString(fmt.Sprintf("Attack Run: 1\n"))
+	sb.WriteString(fmt.Sprintf("Leaked From Household: %s\n", sourcePartyID))
+	sb.WriteString(fmt.Sprintf("Leaked From Section: %d\n", sourceSectionIndex))
+	sb.WriteString(fmt.Sprintf("Attack Result: %s\n\n", resultStr))
+
+	sb.WriteString(fmt.Sprintf("--- Attacker's Data Block (Size: %d) ---\n", len(attackerBlock)))
+	sb.WriteString(fmt.Sprintf("%v\n\n", attackerBlock))
+
+	sb.WriteString(fmt.Sprintf("--- Source Household Data State (ID: %s) ---\n\n", sourcePartyID))
+
+	for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+		sb.WriteString(fmt.Sprintf("[Section %d]\n", sectionIdx))
+		if sourceParty.flag[sectionIdx] == 0 {
+			sb.WriteString(fmt.Sprintf("  - Unencrypted Readings (%d values): %v\n", sectionSize, sourceParty.plainInput[sectionIdx]))
+		} else {
+			sb.WriteString(fmt.Sprintf("  - Encrypted Readings (%d values): %v\n\n", sectionSize, sourceParty.encryptedInput[sectionIdx]))
+		}
+	}
+
+	err := os.WriteFile(filename, []byte(sb.String()), 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to write attack log to file %s: %v\n", filename, err)
+	}
 }
