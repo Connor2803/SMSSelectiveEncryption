@@ -205,9 +205,10 @@ class Welford:
 
 
 class EncryptionSelectorEnv(gym.Env):
-    def __init__(self, dataset_type: str, policy_penalty: int):
+    def __init__(self, dataset_type: str, current_leaked_plaintext_size: str, policy_penalty: int):
         super().__init__()
         self._welford = Welford()
+        self._current_leaked_plaintext_size = current_leaked_plaintext_size
         self._policy_penalty = policy_penalty
 
         self._encryption_ratios = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -532,7 +533,7 @@ class EncryptionSelectorEnv(gym.Env):
                 # print(f"\nEpisode finished. Calling Go program to calculate reward metrics...")
 
                 go_result = subprocess.run(
-                    [GO_EXECUTABLE_PATH, data_for_go_filepath, currentLeakedPlaintextSize],
+                    [GO_EXECUTABLE_PATH, data_for_go_filepath, self._current_leaked_plaintext_size],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -943,34 +944,15 @@ class ConvergenceStoppingCallback(BaseCallback):
 
         return True
 
-
-def main():
-    if len(sys.argv) != 3:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and policy penalty as arguments.")
-        current_leaked_plaintext_size = "12"
-        current_policy_penalty = 500
-    else:
-        current_leaked_plaintext_size = sys.argv[1]
-        current_policy_penalty = int(sys.argv[2])
-
-    try:
-        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to compile Go program: {e}")
-        return
-
-    if not os.path.exists(GO_EXECUTABLE_PATH):
-        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
-
-    # ----- TRAINING PHASE ------
-    print("\n----- TRAINING PHASE BEGIN ------")
-    env_train = EncryptionSelectorEnv(dataset_type="train", policy_penalty=current_policy_penalty)
+def call_training_phase(current_leaked_plaintext_size: str, current_policy_penalty: int):
+    env_train = EncryptionSelectorEnv(dataset_type="train", current_leaked_plaintext_size=current_leaked_plaintext_size, policy_penalty=current_policy_penalty)
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
 
     logging_callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), f'./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/training_log_{current_leaked_plaintext_size}_{current_policy_penalty}.csv'),
+        log_path_global_train=os.path.join(os.getcwd(),
+                                           f'./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/training_log_{current_leaked_plaintext_size}_{current_policy_penalty}.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
@@ -985,21 +967,22 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save(f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
+    model.save(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
     del model
 
-    # ----- VALIDATION PHASE ------
-    print("\n----- VALIDATION PHASE BEGIN ------")
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
-    env_val = EncryptionSelectorEnv(dataset_type="validation", policy_penalty=current_policy_penalty)
+def call_validation_phase(current_leaked_plaintext_size: str, current_policy_penalty: int):
+    model = DQN.load(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
+    env_val = EncryptionSelectorEnv(dataset_type="validation", current_leaked_plaintext_size=current_leaked_plaintext_size, policy_penalty=current_policy_penalty)
     env_val.reset()
     model.set_env(env_val)
     evaluate_policy(model, env_val, render=False)
 
-    # ----- TESTING PHASE (Combined) ------
-    print("\n----- TESTING PHASE (Combined) BEGIN ------")
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
-    env_test_combined = EncryptionSelectorEnv(dataset_type="test", policy_penalty=current_policy_penalty)
+def call_testing_phase(current_leaked_plaintext_size: str, current_policy_penalty: int):
+    model = DQN.load(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
+    env_test_combined = EncryptionSelectorEnv(dataset_type="test", current_leaked_plaintext_size=current_leaked_plaintext_size, policy_penalty=current_policy_penalty)
     env_test_combined.reset()
     model.set_env(env_test_combined)
 
@@ -1078,6 +1061,48 @@ def main():
     # elapsed_time_ph = end_time_ph - start_time_ph
     # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
 
+def main():
+    if len(sys.argv) != 4:
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size, policy penalty, and phase type as arguments.")
+        current_leaked_plaintext_size = "12"
+        current_policy_penalty = 500
+        user_chosen_phase_type = "training"
+
+    else:
+        current_leaked_plaintext_size = sys.argv[1]
+        current_policy_penalty = int(sys.argv[2])
+        user_chosen_phase_type = sys.argv[3]
+
+    try:
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to compile Go program: {e}")
+        return
+
+    if not os.path.exists(GO_EXECUTABLE_PATH):
+        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
+
+    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
+    if user_chosen_phase_type == "training":
+        print("\nStarting training phase...")
+        start_training_time = time.time()
+        call_training_phase(current_leaked_plaintext_size, current_policy_penalty)
+        end_training_time = time.time()
+        print(f"Total training time: %.2f seconds\n" % (end_training_time - start_training_time))
+
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size, current_policy_penalty)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "validation":
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size, current_policy_penalty)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "testing":
+        print("\nStarting testing phase...")
+        call_testing_phase(current_leaked_plaintext_size, current_policy_penalty)
+        print("\nTesting phase completed.")
 
 if __name__ == "__main__":
     main()

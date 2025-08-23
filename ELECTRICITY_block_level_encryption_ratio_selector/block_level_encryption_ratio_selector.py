@@ -911,32 +911,15 @@ class ConvergenceStoppingCallback(BaseCallback):
 
         return True
 
-
-def main():
-    if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size as an argument.")
-        current_leaked_plaintext_size = "12"
-    else:
-        current_leaked_plaintext_size = sys.argv[1]
-
-    try:
-        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to compile Go program: {e}")
-        return
-
-    if not os.path.exists(GO_EXECUTABLE_PATH):
-        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
-
-    # ----- TRAINING PHASE ------
-    print("\n----- TRAINING PHASE BEGIN ------")
+def call_training_phase(current_leaked_plaintext_size):
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
 
     logging_callback = SectionLoggingCallback(
         current_dataset_type="train",
-        log_path_global_train=os.path.join(os.getcwd(), f'./ELECTRICITY_block_level_encryption_ratio_selector/training_log_{current_leaked_plaintext_size}.csv'),
+        log_path_global_train=os.path.join(os.getcwd(),
+                                           f'./ELECTRICITY_block_level_encryption_ratio_selector/training_log_{current_leaked_plaintext_size}.csv'),
         log_path_global_test_ph=None,
         log_path_global_test_combined=None,
         verbose=0)
@@ -951,23 +934,21 @@ def main():
 
     model.learn(total_timesteps=6000000,
                 callback=combined_callbacks)  # 1 episode: total_timesteps = 60 testing households x 10 sections (600)
-    model.save(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
+    model.save(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
     del model
 
-    # ----- VALIDATION PHASE ------
-    print("\n----- VALIDATION PHASE BEGIN ------")
-
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
+def call_validation_phase(current_leaked_plaintext_size):
+    model = DQN.load(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
-
     evaluate_policy(model, env_val, render=False)
 
-    # ----- TESTING PHASE (Combined) ------
-    print("\n----- TESTING PHASE (Combined) BEGIN ------")
-
-    model = DQN.load(f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
+def call_testing_phase(current_leaked_plaintext_size):
+    model = DQN.load(
+        f"./ELECTRICITY_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test")
     model.set_env(env_test_combined)
 
@@ -1045,6 +1026,50 @@ def main():
     # print(f"Per-household testing finished at: {time.ctime(end_time_ph)}")
     # elapsed_time_ph = end_time_ph - start_time_ph
     # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
+
+
+def main():
+    if len(sys.argv) != 3:
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and phase type as arguments.")
+        current_leaked_plaintext_size = "12"
+        user_chosen_phase_type = "training"
+    else:
+        current_leaked_plaintext_size = sys.argv[1]
+        user_chosen_phase_type = sys.argv[2]
+
+    try:
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to compile Go program: {e}")
+        return
+
+    if not os.path.exists(GO_EXECUTABLE_PATH):
+        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
+
+    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
+    if user_chosen_phase_type == "training":
+        print("\nStarting training phase...")
+        start_training_time = time.time()
+        call_training_phase(current_leaked_plaintext_size)
+        end_training_time = time.time()
+        print(f"Total training time: %.2f seconds\n" % (end_training_time - start_training_time))
+
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "validation":
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "testing":
+        print("\nStarting testing phase...")
+        call_testing_phase(current_leaked_plaintext_size)
+        print("\nTesting phase completed.")
+
+
+
 
 
 if __name__ == "__main__":

@@ -15,6 +15,32 @@ import csv
 import sys
 import subprocess
 
+log_headers = ["Episode",
+             "HouseholdID",
+             "Total Reward",
+             "Selected Encryption Ratio",
+             "Scaled Average Reidentification Attack Duration",
+             "Scaled Average Reidentification Mean",
+             "Scaled Sum Remaining Entropy",
+             "Scaled Average Memory MiB",
+             "Scaled Summation Error",
+             "Scaled Deviation Error",
+             "Scaled Encryption Time",
+             "Scaled Decryption Time",
+             "Scaled Summation Operations Time",
+             "Scaled Deviation Operations Time",
+             "Average Reidentification Duration",
+             "Average Reidentification Mean",
+             "Sum Remaining Entropy",
+             "Average Memory MiB",
+             "Summation Error",
+             "Deviation Error",
+             "Encryption Time",
+             "Decryption Time",
+             "Summation Operations Time",
+             "Deviation Operations Time",
+             ]
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 EXECUTABLE_NAME = "generate_household_level_metrics"
 if sys.platform == "win32":
@@ -424,37 +450,7 @@ def log_to_csv(writer, episode_num, household_id, reward, info):
     info.get("raw_deviation_operations_time", 0),
     ])
 
-def main():
-    if len(sys.argv) != 2:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size as an argument.")
-        current_leaked_plaintext_size = "12"
-    else:
-        current_leaked_plaintext_size = sys.argv[1]
-
-    try:
-        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to compile Go program: {e}")
-        return
-
-    if not os.path.exists(GO_EXECUTABLE_PATH):
-        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
-
-    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
-    try:
-        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
-        subprocess.run(run_args,
-                       check=True,
-                       capture_output=True,
-                       text=True,
-                       timeout=3600 # 1 hour
-                       )
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to run Go program: {e}")
-        print(f"Stderr: {e.stderr}")
-        return
-
-    # ----- TRAINING PHASE ------
+def call_training_phase(current_leaked_plaintext_size):
     env_train = EncryptionSelectorEnv(dataset_type="train")
 
     # Training file log creation
@@ -494,7 +490,8 @@ def main():
 
         model = DQN(policy=MultiInputPolicy, env=env_train, verbose=1)
         model.learn(total_timesteps=10000, log_interval=4, callback=CustomCallback(csv_writer, verbose=0))
-        model.save(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
+        model.save(
+            f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
 
     except Exception as e:
         print(f"An error occurred during training: {e}")
@@ -505,35 +502,9 @@ def main():
 
     del model
 
-    log_headers = ["Episode",
-                   "HouseholdID",
-                   "Total Reward",
-                   "Selected Encryption Ratio",
-                   "Scaled Average Reidentification Attack Duration",
-                   "Scaled Average Reidentification Mean",
-                   "Scaled Sum Remaining Entropy",
-                   "Scaled Average Memory MiB",
-                   "Scaled Summation Error",
-                   "Scaled Deviation Error",
-                   "Scaled Encryption Time",
-                   "Scaled Decryption Time",
-                   "Scaled Summation Operations Time",
-                   "Scaled Deviation Operations Time",
-                   "Average Reidentification Duration",
-                   "Average Reidentification Mean",
-                   "Sum Remaining Entropy",
-                   "Average Memory MiB",
-                   "Summation Error",
-                   "Deviation Error",
-                   "Encryption Time",
-                   "Decryption Time",
-                   "Summation Operations Time",
-                   "Deviation Operations Time",
-                   ]
-
-    # ----- VALIDATION PHASE ------
-    print("\n--- Starting Validation ---")
-    model = DQN.load(f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}")
+def call_validation_phase(current_leaked_plaintext_size):
+    model = DQN.load(
+        f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip")
     env_val = EncryptionSelectorEnv(dataset_type="validation")
     env_val.reset()
     model.set_env(env_val)
@@ -561,12 +532,14 @@ def main():
     #         if terminated or truncated:
     #             obs, info = env_val.reset()
 
-    # ----- TESTING PHASE ------
-    print("\n--- Starting Testing ---")
+def call_testing_phase(current_leaked_plaintext_size):
+    model = DQN.load(
+        f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip")
     env_test = EncryptionSelectorEnv(dataset_type="test")
     testing_households = env_test._active_households.copy()
 
-    with open(f"./WATER_household_level_encryption_ratio_selector/testing_log.csv_{current_leaked_plaintext_size}.csv", "w", newline="") as file:
+    with open(f"./WATER_household_level_encryption_ratio_selector/testing_log.csv_{current_leaked_plaintext_size}.csv",
+              "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(log_headers)
 
@@ -579,7 +552,59 @@ def main():
 
             log_to_csv(writer, i + 1, household_id, reward, info_step)
 
-    print("Testing finished.\n")
+def main():
+    if len(sys.argv) != 3:
+        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and phase type as arguments.")
+        current_leaked_plaintext_size = "12"
+        user_chosen_phase_type = "training"
+    else:
+        current_leaked_plaintext_size = sys.argv[1]
+        user_chosen_phase_type = sys.argv[2]
+
+    try:
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to compile Go program: {e}")
+        return
+
+    if not os.path.exists(GO_EXECUTABLE_PATH):
+        raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
+
+    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+    try:
+        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
+        subprocess.run(run_args,
+                       check=True,
+                       capture_output=True,
+                       text=True,
+                       timeout=3600 # 1 hour
+                       )
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to run Go program: {e}")
+        print(f"Stderr: {e.stderr}")
+        return
+
+    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
+    if user_chosen_phase_type == "training":
+        print("\nStarting training phase...")
+        start_training_time = time.time()
+        call_training_phase(current_leaked_plaintext_size)
+        end_training_time = time.time()
+        print(f"Total training time: %.2f seconds\n" % (end_training_time - start_training_time))
+
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "validation":
+        print("\nStarting validation phase...")
+        call_validation_phase(current_leaked_plaintext_size)
+        print("\nValidation phase completed.")
+
+    elif user_chosen_phase_type == "testing":
+        print("\nStarting testing phase...")
+        call_testing_phase(current_leaked_plaintext_size)
+        print("\nTesting phase completed.")
 
 if __name__ == "__main__":
     main()
