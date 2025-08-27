@@ -2,28 +2,6 @@
 
 import subprocess
 
-# def run_electricity_per_household_test(leaked_plaintext_size):
-#     try:
-#         subprocess.run(["python", "./test_model_electricity/test_model_electricity.py", leaked_plaintext_size])
-#     except subprocess.CalledProcessError as e:
-#         print(f"ERROR: test_model_electricity.py program failed with CalledProcessError: {e}")
-#         print(f"Stderr: {e.stderr}")
-#     except FileNotFoundError:
-#         print(f"WARNING: File not found")
-#         return None
-#
-#
-# def run_water_per_household_test(leaked_plaintext_size):
-#     try:
-#         subprocess.run(["python", "./test_model_water/test_model_water.py", leaked_plaintext_size])
-#     except subprocess.CalledProcessError as e:
-#         print(f"ERROR: test_model_water.py program failed with CalledProcessError: {e}")
-#         print(f"Stderr: {e.stderr}")
-#     except FileNotFoundError:
-#         print(f"WARNING: File not found.")
-#         return None
-
-
 def run_electricity_per_household(leaked_plaintext_size, phase_type):
     try:
         subprocess.run(["python",
@@ -107,20 +85,21 @@ def run_water_per_block_with_policy(leaked_plaintext_size, policy_penalty, phase
 
 
 def main():
-    leaked_plaintext_sizes = ["3", "6", "9", "12", "24", "36",
-                          "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
+    leaked_plaintext_sizes = ["12", "24", "48"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
     policy_penalties = ["500", "600", "700"]
+    phase_type = "training"
 
     for leaked_plaintext_size in leaked_plaintext_sizes:
-        # run_electricity_per_household(leaked_plaintext_size=leaked_plaintext_size)
-        # run_water_per_household(leaked_plaintext_size=leaked_plaintext_size)
+        # run_electricity_per_household(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
+        # run_water_per_household(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
         #
-        # run_electricity_per_block(leaked_plaintext_size=leaked_plaintext_size)
-        # run_water_per_block(leaked_plaintext_size=leaked_plaintext_size)
+        # run_electricity_per_block(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
+        # run_water_per_block(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
 
         for policy_penalty in policy_penalties:
+            print(f"Running with leaked plaintext size: {leaked_plaintext_size} and policy penalty: {policy_penalty}\n")
             run_electricity_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
-            # run_water_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
+            run_water_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
 
 
 if __name__ == "__main__":

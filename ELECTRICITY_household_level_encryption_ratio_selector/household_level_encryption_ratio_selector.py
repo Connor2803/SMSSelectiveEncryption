@@ -207,6 +207,20 @@ class EncryptionSelectorEnv(gym.Env):
         return {}
 
     def step(self, action):
+        print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+        try:
+            run_args = [GO_EXECUTABLE_PATH, "2", current_leaked_plaintext_size]
+            subprocess.run(run_args,
+                           check=True,
+                           capture_output=True,
+                           text=True,
+                           timeout=3600  # 1 hour
+                           )
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to run Go program: {e}")
+            print(f"Stderr: {e.stderr}")
+            return
+
         # Map the action to the encryption ratio chosen by the agent.
         encryption_ratio = self._encryption_ratios[action]
 
@@ -567,20 +581,6 @@ def main():
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Failed to compile Go program: {e}")
-        print(f"Stderr: {e.stderr}")
-        return
-
-    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
-    try:
-        run_args = [GO_EXECUTABLE_PATH, "2", current_leaked_plaintext_size]
-        subprocess.run(run_args,
-                       check=True,
-                       capture_output=True,
-                       text=True,
-                       timeout=3600 # 1 hour
-                       )
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to run Go program: {e}")
         print(f"Stderr: {e.stderr}")
         return
 
