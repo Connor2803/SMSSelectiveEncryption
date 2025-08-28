@@ -570,22 +570,23 @@ def main():
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
-    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
-    try:
-        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
-        subprocess.run(run_args,
-                       check=True,
-                       capture_output=True,
-                       text=True,
-                       timeout=3600 # 1 hour
-                       )
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to run Go program: {e}")
-        print(f"Stderr: {e.stderr}")
-        return
 
     print(f"\nUser chosen phase type: {user_chosen_phase_type}")
     if user_chosen_phase_type == "training":
+        print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+        try:
+            run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
+            subprocess.run(run_args,
+                           check=True,
+                           capture_output=True,
+                           text=True,
+                           timeout=3600  # 1 hour
+                           )
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to run Go program: {e}")
+            print(f"Stderr: {e.stderr}")
+            return
+
         print("\nStarting training phase...")
         start_training_time = time.time()
         call_training_phase(current_leaked_plaintext_size)

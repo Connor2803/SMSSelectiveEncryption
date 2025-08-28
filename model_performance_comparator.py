@@ -1,12 +1,12 @@
 # python ./model_performance_comparator.py <leaked_plaintext_size> <number_of_runs> <policy_penalty>
 
+import re
+import statistics
 import subprocess
 import sys
+from collections import defaultdict
 
 import pandas as pd
-import statistics
-import re
-from collections import defaultdict
 
 # The fixed 10 test households that will be compared across all RL models.
 electricity_test_households = ["MAC000248.csv",
@@ -95,8 +95,6 @@ def parse_block_level_log(log_df: pd.DataFrame, test_households: list) -> list:
 def run_single_test_and_get_results(leaked_plaintext_size: str, folder_name: str, model_name: str,
                                     dataset: str, policy_penalty: str = None) -> list:
     """Executes one test run and calls the correct parser based on the model type."""
-    print(f"Executing test run for {folder_name} (size: {leaked_plaintext_size}, policy: {policy_penalty or 'N/A'})...")
-
     command = ["python", f"./{folder_name}/{model_name}.py", leaked_plaintext_size]
     if policy_penalty:
         command.append(policy_penalty)
@@ -188,8 +186,8 @@ def main():
     if len(sys.argv) < 3:
         print("Usage: python model_performance_comparator.py <leaked_plaintext_size> <number_of_runs> [policy_penalty]")
         leaked_plaintext_size = "12"
-        number_of_runs = 4
-        policy_penalty = "700"
+        number_of_runs = 10
+
     else:
         leaked_plaintext_size = sys.argv[1]
         number_of_runs = int(sys.argv[2])
@@ -198,50 +196,61 @@ def main():
     folder_names = [
         # "ELECTRICITY_household_level_encryption_ratio_selector",
         # "WATER_household_level_encryption_ratio_selector",
-        # "ELECTRICITY_block_level_encryption_ratio_selector",
-        # "WATER_block_level_encryption_ratio_selector",
-        "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",
+        "ELECTRICITY_block_level_encryption_ratio_selector",
+        "WATER_block_level_encryption_ratio_selector",
+        # "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",
         # "WATER_block_level_encryption_ratio_selector_with_policy"
     ]
 
     print(f"Starting comparison of {number_of_runs} test runs for leaked plaintext size of {leaked_plaintext_size}\n")
 
     for folder_name in folder_names:
+        current_policy_penalty = None
+        if "with_policy" in folder_name:
+            if not policy_penalty:
+                print(f"WARNING: Skipping {folder_name} because policy_penalty is required but not provided.")
+                continue
+            current_policy_penalty = policy_penalty
+
         model_name = "household_level_encryption_ratio_selector" if "household_level" in folder_name else \
             "block_level_encryption_ratio_selector_with_policy" if "with_policy" in folder_name else \
                 "block_level_encryption_ratio_selector"
+
         dataset = folder_name.split("_")[0]
+
+        if "household_level_encryption_ratio_selector" in folder_name:
+            print(f"\n\n\nGenerating metrics for {folder_name} using generate_household_level_metrics.go with leaked plaintext size:{leaked_plaintext_size}\n\n\n")
+            if dataset == "ELECTRICITY":
+                go_dataset = "2"
+            else:
+                go_dataset = "1"
+            try:
+                go_program_path = f"./{folder_name}/generate_household_level_metrics.go"
+                subprocess.run(["go", "run", go_program_path, go_dataset, leaked_plaintext_size],
+                               check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: The Go program failed for {folder_name}:\n{e.stderr}")
+                continue
 
         all_runs_data = []
 
-        for folder_name in folder_names:
-            current_policy_penalty = None
-            if "with_policy" in folder_name:
-                if not policy_penalty:
-                    print(f"WARNING: Skipping {folder_name} because policy_penalty is required but not provided.")
-                    continue
-                current_policy_penalty = policy_penalty
+        print("*" * 100)
+        print(f"\nProcessing Model: {folder_name}")
+        for i in range(number_of_runs):
+            print(
+                f"Executing test run {i+1}/{number_of_runs} for {folder_name} (size: {leaked_plaintext_size}, policy: {policy_penalty or 'N/A'})")
+            single_run_results = run_single_test_and_get_results(
+                leaked_plaintext_size, folder_name, model_name, dataset, current_policy_penalty
+            )
+            if single_run_results:
+                all_runs_data.extend(single_run_results)
+            else:
+                print(f"  - Run {i + 1} failed. Skipping.")
 
-            model_name = "household_level_encryption_ratio_selector" if "household_level" in folder_name else \
-                "block_level_encryption_ratio_selector_with_policy" if "with_policy" in folder_name else \
-                    "block_level_encryption_ratio_selector"
-            dataset = folder_name.split("_")[0]
-            all_runs_data = []
+        final_analysis = run_analysis(all_runs_data)
 
-            print(f"\n--- Processing Model: {folder_name} ---")
-            for i in range(number_of_runs):
-                single_run_results = run_single_test_and_get_results(
-                    leaked_plaintext_size, folder_name, model_name, dataset, current_policy_penalty
-                )
-                if single_run_results:
-                    all_runs_data.extend(single_run_results)
-                else:
-                    print(f"  - Run {i + 1} failed. Skipping.")
-
-            final_analysis = run_analysis(all_runs_data)
-
-            write_results_to_csv(final_analysis, model_name, dataset, leaked_plaintext_size, current_policy_penalty)
-            print("-" * 50)
+        write_results_to_csv(final_analysis, model_name, dataset, leaked_plaintext_size, current_policy_penalty)
+        print("*" * 100)
 
 
 if __name__ == "__main__":
