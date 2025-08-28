@@ -55,43 +55,43 @@ type Party struct {
 	rawDates       []string    // All dates corresponding to rawInput
 	input          [][]float64 // Encryption data
 	plainInput     []float64   // Plaintext data
-	flag           []int       // Slice to track which sections have been encrypted
+	flag           []int       // Slice to track which blocks have been encrypted
 	group          []int
 	entropy        []float64   // Entropy for block
-	encryptedInput [][]float64 // Transformed data for each block/section after encryption
+	encryptedInput [][]float64 // Transformed data for each block after encryption
 } // Struct to represent an individual household
 
-type SectionsMetrics struct {
+type BlocksMetrics struct {
 	HouseholdCSVFileName                    string
-	SectionNumber                           int
+	BlockNumber                             int
 	DateRange                               string // DD-MM-YYYY to DD-MM-YYYY
-	SectionSumUsage                         float64
+	BlockSumUsage                           float64
 	EncryptionRatio                         float64
-	RawEntropy                              float64 // Per-section, pre-encryption entropy value
-	RemainingEntropy                        float64 // Per-section, post-encryption entropy value
+	RawEntropy                              float64 // Per-block, pre-encryption entropy value
+	RemainingEntropy                        float64 // Per-block, post-encryption entropy value
 	ReidentificationRate                    float64
 	ReidentificationStandardError           float64
 	ReidentificationAttackDuration          time.Duration // Total time for the entire attack to run (in seconds).
 	AvgPerReidentificationAttackRunDuration float64       // Average time for a single attack to run (in seconds).
 	ProgramAllocatedMemoryMiB               float64       // Program's allocated memory in MiB for this ratio
-} // Struct to represent a section/block in an individual household
+} // Struct to represent a block in an individual household
 
 type ResultKey struct {
 	HouseholdCSVFileName string
-	SectionNumber        int
+	BlockNumber          int
 	EncryptionRatio      float64
-} // Struct to represent the unique identifier for a section/block.
+} // Struct to represent the unique identifier for a block.
 
 const DatasetWater = 1
 const DatasetElectricity = 2
 
 const MaxPartyRows = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
-const sectionSize = 1024   // Block Size: 2048 for summation correctness, 8192 for variance correctness
+const BlockSize = 1024     // Block Size: 2048 for summation correctness, 8192 for variance correctness
 
-var currentDataset int // Water(1), Electricity(2)
-var maxHouseholdsNumber = 80
+var currentDataset int       // Water(1), Electricity(2)
+var maxHouseholdsNumber = 70 // Since last 10 households are fixed testing group.
 
-var sectionNum int // Number of sections/block of data for each household, i.e., MAXPARTYROWS/sectionSize
+var blockNum int // Number of blocks/block of data for each household, i.e., MAXPARTYROWS/BlockSize
 var globalPartyRows = -1
 
 var maxReidentificationAttempts = 1000 // Default value for number of loops for membershipIdentificationAttack.
@@ -192,12 +192,12 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 	// --- 1. Setup Phase ---
 	err := metricsWriter.Write([]string{
 		"filename",
-		"section",
+		"block",
 		"date_range",
-		"section_sum_usage",
+		"block_sum_usage",
 		"encryption_ratio",
-		"section_raw_entropy",
-		"section_remaining_entropy",
+		"block_raw_entropy",
+		"block_remaining_entropy",
 		"reidentification_mean",
 		"reidentification_standard_error",
 		"reidentification_attack_duration",
@@ -220,52 +220,52 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 	P := genParties(params, fileList)
 
-	// Populate Party.rawInput and sets the global sectionNum.
-	_, expAverage, _, _, _, _ := genInputs(P, &[]SectionsMetrics{})
+	// Populate Party.rawInput and sets the global blockNum.
+	_, expAverage, _, _, _, _ := genInputs(P, &[]BlocksMetrics{})
 
-	allResults := make(map[ResultKey]SectionsMetrics)
+	allResults := make(map[ResultKey]BlocksMetrics)
 
 	// --- 2. Processing Phase ---
 	encryptionRatios := []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}
 
 	for _, encRatio := range encryptionRatios {
 		for _, party := range P {
-			for sectionIdx := 0; sectionIdx < sectionNum; sectionIdx++ {
+			for blockIdx := 0; blockIdx < blockNum; blockIdx++ {
 
-				// Get the original raw data for the current section.
-				start := sectionIdx * sectionSize
-				end := (sectionIdx + 1) * sectionSize
+				// Get the original raw data for the current block.
+				start := blockIdx * BlockSize
+				end := (blockIdx + 1) * BlockSize
 				if end > len(party.rawInput) {
 					end = len(party.rawInput)
 				}
-				rawSectionData := party.rawInput[start:end]
-				rawSectionDates := party.rawDates[start:end]
+				rawBlockData := party.rawInput[start:end]
+				rawBlockDates := party.rawDates[start:end]
 
 				// Calculate raw entropy directly from the raw data.
-				rawEntropy := calculateEntropy(rawSectionData)
+				rawEntropy := calculateEntropy(rawBlockData)
 
-				// Calculate sum of all the utility meter readings from a section.
-				sectionSumUsage := 0.0
-				for _, val := range rawSectionData {
-					sectionSumUsage += val
+				// Calculate sum of all the utility meter readings from a block.
+				blockSumUsage := 0.0
+				for _, val := range rawBlockData {
+					blockSumUsage += val
 				}
 
-				// Determine Date Range for section
+				// Determine Date Range for block
 				var dateRange string
-				if len(rawSectionDates) > 0 {
-					firstDate := rawSectionDates[0]
-					lastDate := rawSectionDates[len(rawSectionDates)-1]
+				if len(rawBlockDates) > 0 {
+					firstDate := rawBlockDates[0]
+					lastDate := rawBlockDates[len(rawBlockDates)-1]
 					dateRange = fmt.Sprintf("%s to %s", firstDate, lastDate)
 				} else {
 					dateRange = "N/A"
 				}
 
 				// Create a temporary copy to apply the encryption ratio to.
-				tempSectionInput := make([]float64, len(rawSectionData))
-				copy(tempSectionInput, rawSectionData)
+				tempBlockInput := make([]float64, len(rawBlockData))
+				copy(tempBlockInput, rawBlockData)
 
-				for j := range tempSectionInput {
-					tempSectionInput[j] *= (1.0 - encRatio)
+				for j := range tempBlockInput {
+					tempBlockInput[j] *= (1.0 - encRatio)
 
 					// Apply quantisation (coarser rounding) based on the encryption ratio
 					// To simulate the information loss that occurs during a privacy-preserving.
@@ -277,28 +277,28 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 					} else {
 						precision = 1 // Round to 0 decimal place for high ratios
 					}
-					tempSectionInput[j] = float64(math.Round(tempSectionInput[j]*float64(precision)) / float64(precision))
+					tempBlockInput[j] = float64(math.Round(tempBlockInput[j]*float64(precision)) / float64(precision))
 				}
 
 				// Store the transformed data in Party.encryptedInput for attack
-				party.encryptedInput[sectionIdx] = tempSectionInput
+				party.encryptedInput[blockIdx] = tempBlockInput
 
 				// Calculate remaining entropy from the modified data.
-				remainingEntropy := calculateEntropy(tempSectionInput)
+				remainingEntropy := calculateEntropy(tempBlockInput)
 
 				// Create the key for the map
 				key := ResultKey{
 					HouseholdCSVFileName: filepath.Base(party.filename),
-					SectionNumber:        sectionIdx,
+					BlockNumber:          blockIdx,
 					EncryptionRatio:      encRatio,
 				}
 
 				// Append the complete result for this data point.
-				allResults[key] = SectionsMetrics{
+				allResults[key] = BlocksMetrics{
 					HouseholdCSVFileName: party.filename,
-					SectionNumber:        sectionIdx,
+					BlockNumber:          blockIdx,
 					DateRange:            dateRange,
-					SectionSumUsage:      sectionSumUsage,
+					BlockSumUsage:        blockSumUsage,
 					EncryptionRatio:      encRatio,
 					RawEntropy:           rawEntropy,
 					RemainingEntropy:     remainingEntropy,
@@ -309,11 +309,11 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		// --- 2.5 Homomorphic Computations Phase --
 		// Populate party.input and party.plainInput with the raw data for HE operations.
-		// party.input slice  holds sections intended for HE operations.
-		// party.plainInput slice holds sections intended for non-HE processing.
-		// NOTE: The population of these slices are deterministic, i.e., the first numHESections are sent for HE operations
-		// which is based on the proportion of the sections encrypted using the encRatio,
-		// i.e., encRatio of 0.4 would encrypt the first 40% of the sections within a party/household.
+		// party.input slice  holds blocks intended for HE operations.
+		// party.plainInput slice holds blocks intended for non-HE processing.
+		// NOTE: The population of these slices are deterministic, i.e., the first numHEBlocks are sent for HE operations
+		// which is based on the proportion of the blocks encrypted using the encRatio,
+		// i.e., encRatio of 0.4 would encrypt the first 40% of the blocks within a party/household.
 		expSummationForRatio := make([]float64, len(P))
 		expDeviationForRatio := make([]float64, len(P))
 		plainSum := make([]float64, len(P))
@@ -322,26 +322,26 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 			po.input = make([][]float64, 0)
 			po.plainInput = make([]float64, 0)
 
-			numHESections := int(float64(sectionNum) * encRatio)
-			totalSections := len(po.rawInput) / sectionSize
+			numHEBlocks := int(float64(blockNum) * encRatio)
+			totalBlocks := len(po.rawInput) / BlockSize
 
 			heInputDataFlat := []float64{}
 
-			for s := 0; s < totalSections; s++ {
-				sectionStart := s * sectionSize
-				sectionEnd := (s + 1) * sectionSize
-				if sectionEnd > len(po.rawInput) {
-					sectionEnd = len(po.rawInput)
+			for s := 0; s < totalBlocks; s++ {
+				blockStart := s * BlockSize
+				blockEnd := (s + 1) * BlockSize
+				if blockEnd > len(po.rawInput) {
+					blockEnd = len(po.rawInput)
 				}
-				currentSectionData := po.rawInput[sectionStart:sectionEnd]
+				currentBlockData := po.rawInput[blockStart:blockEnd]
 
-				if s < numHESections {
-					// This section goes to HE
-					po.input = append(po.input, currentSectionData)
-					heInputDataFlat = append(heInputDataFlat, currentSectionData...)
+				if s < numHEBlocks {
+					// This block goes to HE
+					po.input = append(po.input, currentBlockData)
+					heInputDataFlat = append(heInputDataFlat, currentBlockData...)
 				} else {
-					// This section goes to plaintext
-					po.plainInput = append(po.plainInput, currentSectionData...)
+					// This block goes to plaintext
+					po.plainInput = append(po.plainInput, currentBlockData...)
 
 				}
 			}
@@ -389,7 +389,7 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		reidPhaseStartTime := time.Now()
 
-		// After all households/parties and sections have had the current encryption ratio applied,
+		// After all households/parties and blocks have had the current encryption ratio applied,
 		// Run the member identification attack.
 		fmt.Printf("\n--- Starting Attack Phase for Encryption Ratio: %.2f ---\n", encRatio)
 		currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio)
@@ -441,9 +441,9 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 	for _, result := range allResults {
 		err := metricsWriter.Write([]string{
 			filepath.Base(result.HouseholdCSVFileName),
-			strconv.Itoa(result.SectionNumber),
+			strconv.Itoa(result.BlockNumber),
 			result.DateRange,
-			fmt.Sprintf("%.2f", result.SectionSumUsage),
+			fmt.Sprintf("%.2f", result.BlockSumUsage),
 			fmt.Sprintf("%.2f", result.EncryptionRatio),
 			fmt.Sprintf("%.6f", result.RawEntropy),
 			fmt.Sprintf("%.6f", result.RemainingEntropy),
@@ -509,9 +509,9 @@ func genParties(params ckks.Parameters, fileList []string) []*Party {
 }
 
 // Generate inputs of parties/households
-func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
+func genInputs(P []*Party, metrics *[]BlocksMetrics) (expSummation, expAverage, expDeviation []float64, min, max, entropySum float64) {
 	globalPartyRows = -1
-	sectionNum = 0
+	blockNum = 0
 	min = math.MaxFloat64
 	max = float64(-1)
 	frequencyMap := map[float64]int{}
@@ -533,9 +533,9 @@ func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage
 			lenPartyRows = MaxPartyRows
 		}
 		if globalPartyRows == -1 {
-			sectionNum = lenPartyRows / sectionSize // sectionNum = 10, since lenPartyRows = 10240, sectionSize = 1024
-			if lenPartyRows%sectionSize != 0 {
-				sectionNum++
+			blockNum = lenPartyRows / BlockSize // blockNum = 10, since lenPartyRows = 10240, BlockSize = 1024
+			if lenPartyRows%BlockSize != 0 {
+				blockNum++
 			}
 			globalPartyRows = lenPartyRows
 			expSummation = make([]float64, len(P))
@@ -550,10 +550,10 @@ func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage
 		// Set up Party structure
 		po.rawInput = make([]float64, globalPartyRows)
 		po.rawDates = make([]string, globalPartyRows)
-		po.flag = make([]int, sectionNum)        // Marked sections for encryption.
-		po.entropy = make([]float64, sectionNum) // Entropy values for each section of a particular party/household.
-		po.encryptedInput = make([][]float64, sectionNum)
-		po.group = make([]int, sectionSize)
+		po.flag = make([]int, blockNum)        // Marked blocks for encryption.
+		po.entropy = make([]float64, blockNum) // Entropy values for each block of a particular party/household.
+		po.encryptedInput = make([][]float64, blockNum)
+		po.group = make([]int, BlockSize)
 
 		// Fill in rawInput & frequencyMap
 		for i := 0; i < globalPartyRows; i++ {
@@ -581,10 +581,10 @@ func genInputs(P []*Party, metrics *[]SectionsMetrics) (expSummation, expAverage
 		for i := range po.rawInput {
 			usage := po.rawInput[i]
 			singleRecordEntropy := entropyMap[usage] / float64(frequencyMap[usage])
-			po.entropy[i/sectionSize] += singleRecordEntropy
+			po.entropy[i/BlockSize] += singleRecordEntropy
 			entropySum += singleRecordEntropy // Global all data total entropy
 		}
-		po.flag = make([]int, sectionNum) // Reset flag for every Party
+		po.flag = make([]int, blockNum) // Reset flag for every Party
 
 		// Min, Max based on currentTarget which is always (1) Entropy-based.
 		for _, po := range P {
@@ -675,15 +675,15 @@ func doHomomorphicOperations(params ckks.Parameters, P []*Party, expSummation, e
 
 	// Summation calculations ====================================================
 	encSummationOuts := make([]*rlwe.Ciphertext, len(P))
-	for i, partySections := range encInputsSummation {
-		if len(partySections) == 0 {
-			continue // Skip if no sections for this party.
+	for i, partyBlocks := range encInputsSummation {
+		if len(partyBlocks) == 0 {
+			continue // Skip if no blocks for this party.
 		}
 		partySummationOpsStart := time.Now()
 
-		tmpCiphertext := partySections[0]
-		for j := 1; j < len(partySections); j++ {
-			evaluator.Add(tmpCiphertext, partySections[j], tmpCiphertext)
+		tmpCiphertext := partyBlocks[0]
+		for j := 1; j < len(partyBlocks); j++ {
+			evaluator.Add(tmpCiphertext, partyBlocks[j], tmpCiphertext)
 		}
 
 		evaluator.InnerSum(tmpCiphertext, 1, params.Slots(), tmpCiphertext)
@@ -694,8 +694,8 @@ func doHomomorphicOperations(params ckks.Parameters, P []*Party, expSummation, e
 
 	// Deviation calculation ====================================================
 	encDeviationOuts := make([]*rlwe.Ciphertext, len(P))
-	for i, partySections := range encInputsNegative {
-		if len(partySections) == 0 || encSummationOuts[i] == nil {
+	for i, partyBlocks := range encInputsNegative {
+		if len(partyBlocks) == 0 || encSummationOuts[i] == nil {
 			continue
 		}
 		partyDeviationOpsStart := time.Now()
@@ -705,9 +705,9 @@ func doHomomorphicOperations(params ckks.Parameters, P []*Party, expSummation, e
 
 		var aggregatedDeviation *rlwe.Ciphertext
 
-		for j, sectionCipher := range partySections {
+		for j, blockCipher := range partyBlocks {
 			// Step 1: Subtract the average from the value (by adding the negative value)
-			currentDeviation := evaluator.AddNew(sectionCipher, avgCiphertext)
+			currentDeviation := evaluator.AddNew(blockCipher, avgCiphertext)
 
 			// Step 2: Square the result
 			evaluator.MulRelin(currentDeviation, currentDeviation, currentDeviation)
@@ -878,26 +878,26 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 // Helper function to check if a single party can be identified with the leaked block.
 func isPartyIdentifiable(targetParty *Party, attackerPlaintextBlock []float64, currentEncRatio float64) bool {
 	minMatchCount := math.Ceil(float64(len(attackerPlaintextBlock)) * float64(minPercentMatched) / 100.0)
-	numEncryptedSections := int(currentEncRatio * float64(sectionNum))
-	firstPlaintextSection := numEncryptedSections
+	numEncryptedBlocks := int(currentEncRatio * float64(blockNum))
+	firstPlaintextBlock := numEncryptedBlocks
 
-	for s := firstPlaintextSection; s < sectionNum; s++ {
-		sectionStart := s * sectionSize
-		if sectionStart >= len(targetParty.plainInput) {
+	for s := firstPlaintextBlock; s < blockNum; s++ {
+		blockStart := s * BlockSize
+		if blockStart >= len(targetParty.plainInput) {
 			continue
 		}
-		sectionEnd := (s + 1) * sectionSize
-		if sectionEnd > len(targetParty.plainInput) {
-			sectionEnd = len(targetParty.plainInput)
+		blockEnd := (s + 1) * BlockSize
+		if blockEnd > len(targetParty.plainInput) {
+			blockEnd = len(targetParty.plainInput)
 		}
-		targetSectionData := targetParty.plainInput[sectionStart:sectionEnd]
+		targetBlockData := targetParty.plainInput[blockStart:blockEnd]
 
-		if len(targetSectionData) < len(attackerPlaintextBlock) {
-			continue // Section is too small
+		if len(targetBlockData) < len(attackerPlaintextBlock) {
+			continue // Block is too small
 		}
 
-		for i := 0; i <= len(targetSectionData)-len(attackerPlaintextBlock); i++ {
-			targetWindow := targetSectionData[i : i+len(attackerPlaintextBlock)]
+		for i := 0; i <= len(targetBlockData)-len(attackerPlaintextBlock); i++ {
+			targetWindow := targetBlockData[i : i+len(attackerPlaintextBlock)]
 			matchCount := 0
 			for k := 0; k < len(attackerPlaintextBlock); k++ {
 				if math.Abs(attackerPlaintextBlock[k]-targetWindow[k]) < 1e-9 {
@@ -909,10 +909,10 @@ func isPartyIdentifiable(targetParty *Party, attackerPlaintextBlock []float64, c
 			}
 		}
 	}
-	return false // No match found in any plaintext section
+	return false // No match found in any plaintext block
 }
 
-// getRandomStart is a helper function that returns an unused random start block/section for the Party
+// getRandomStart is a helper function that returns an unused random start block for the Party
 func getRandomStart(party int) int {
 	var valid bool = false
 	var randomStart int
@@ -927,7 +927,7 @@ func getRandomStart(party int) int {
 	return randomStart
 }
 
-// contains is a helper function that checks if the Party has used the random start block/section before.
+// contains is a helper function that checks if the Party has used the random start block before.
 func contains(party int, randomStart int) bool {
 	val, exists := usedRandomStartPartyPairs[party]
 
@@ -960,9 +960,9 @@ func uniqueDataBlock(P []*Party, arr []float64, party int, index int, inputType 
 				}
 			}
 		} else {
-			for _, householdSection := range po.encryptedInput {
-				for i := 0; i < len(householdSection)-leakedPlaintextSize+1; i++ {
-					var target = householdSection[i : i+leakedPlaintextSize]
+			for _, householdBlock := range po.encryptedInput {
+				for i := 0; i < len(householdBlock)-leakedPlaintextSize+1; i++ {
+					var target = householdBlock[i : i+leakedPlaintextSize]
 					if reflect.DeepEqual(target, arr) {
 						unique = false
 						usedRandomStartPartyPairs[pn] = append(usedRandomStartPartyPairs[pn], i)

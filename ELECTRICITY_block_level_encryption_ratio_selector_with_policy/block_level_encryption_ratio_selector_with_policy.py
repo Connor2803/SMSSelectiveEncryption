@@ -958,8 +958,8 @@ def call_training_phase(current_leaked_plaintext_size: str, current_policy_penal
         verbose=0)
 
     convergence_callback = ConvergenceStoppingCallback(
-        check_freq=300000,  # How many timesteps before checking convergence? [Check every 500 episodes]
-        window_size=100,  # How many episodes to use to calculate the moving average reward? [Use last 100 episodes]
+        check_freq=180000,  # How many timesteps before checking convergence? [Check every 300 episodes]
+        window_size=50,  # How many episodes to use to calculate the moving average reward? [Use last 50 episodes]
         variance_threshold=0.1,
     )
 
