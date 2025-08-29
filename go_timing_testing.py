@@ -1,7 +1,7 @@
+import os
 import subprocess
 import time
-import os
-import pandas as pd
+
 
 def get_files_by_pattern_os(pattern):
     matching_files = []
@@ -30,6 +30,8 @@ def run_go_program(go_file_path, output_csv_prefix, run_number, script_dir):
             return execution_time, output_csv_path
         else:
             print(f"Error: Could not find the expected output file at {expected_output_path}")
+            print(
+                f"The Go program might be saving the file to a different location. Check the Go code's output path logic.")
             return None, None
 
     except FileNotFoundError:

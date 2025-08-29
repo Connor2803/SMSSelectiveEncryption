@@ -85,7 +85,7 @@ type ResultKey struct {
 const DatasetWater = 1
 const DatasetElectricity = 2
 
-const MaxPartyRows = 10240 // Total records/meter readings per household (WATER dataset fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
+const MaxPartyRows = 10240 // Total records/meter readings per household (WATER dataset the fewest row count: 20485, WATER dataset greatest row count: 495048, ELECTRICITY dataset fewest row count: 19188, ELECTRICITY dataset greatest row count: 19864)
 const BlockSize = 1024     // Block Size: 2048 for summation correctness, 8192 for variance correctness
 
 var currentDataset int       // Water(1), Electricity(2)
@@ -118,21 +118,23 @@ func main() {
 		currentDataset = args[0]
 		leakedPlaintextSize = args[1]
 	}
-	fmt.Printf("Using dataset: %d and leakedPlaintextSize: %d\n", currentDataset, leakedPlaintextSize)
+	if currentDataset == 1 {
+		fmt.Printf("Using dataset: Water and leakedPlaintextSize: %d\n", leakedPlaintextSize)
+	} else {
+		fmt.Printf("Using dataset: Electricity and leakedPlaintextSize: %d\n", leakedPlaintextSize)
+	}
 
 	var metricsOutputFileName string
 	var partyMetricsOutputFileName string
 
-	exePath, err := os.Executable()
-	check(err)
-	exeDir := filepath.Dir(exePath)
-
 	if currentDataset == DatasetWater {
-		metricsOutputFileName = filepath.Join(exeDir, "ML_metrics_WATER.csv")
-		partyMetricsOutputFileName = filepath.Join(exeDir, "ML_party_metrics_WATER.csv")
+		fmt.Printf("Selected DatasetWater")
+		metricsOutputFileName = "./WATER_household_level_encryption_ratio_selector/ML_metrics_WATER.csv"
+		partyMetricsOutputFileName = "./WATER_household_level_encryption_ratio_selector/ML_party_metrics_WATER.csv"
 	} else {
-		metricsOutputFileName = filepath.Join(exeDir, "ML_metrics_ELECTRICITY.csv")
-		partyMetricsOutputFileName = filepath.Join(exeDir, "ML_party_metrics_ELECTRICITY.csv")
+		fmt.Printf("Selected DatasetElectricity")
+		metricsOutputFileName = "./ELECTRICITY_household_level_encryption_ratio_selector/ML_metrics_ELECTRICITY.csv"
+		partyMetricsOutputFileName = "./ELECTRICITY_household_level_encryption_ratio_selector/ML_party_metrics_ELECTRICITY.csv"
 	}
 	outputFile1, err := os.Create(metricsOutputFileName)
 	check(err)
