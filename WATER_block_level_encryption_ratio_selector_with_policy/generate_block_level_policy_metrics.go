@@ -1,3 +1,9 @@
+/*
+running command: // dataset, leaked plaintext size
+go run .\WATER_block_level_encryption_ratio_selector\generate_block_level_policy_metrics.go 1 12
+> Run this code for the water dataset.
+*/
+
 package main
 
 import (
@@ -18,6 +24,7 @@ import (
 	"time"
 
 	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/drlwe"
 	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
@@ -485,7 +492,7 @@ func performHEEncryption(params ckks.Parameters, parties map[string]*Party, pk *
 			section.unencryptedReadings = tmpPlaintTextReadings
 
 		}
-		parties[partyID].encryptionTime = time.Since(start)
+		parties[partyID].encryptionTime = time.Since(start).Nanoseconds()
 	}
 	return encOutputs, encInputsSummation, encInputsNegative
 }
@@ -643,7 +650,6 @@ func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []strin
 	}
 	fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHouseholdAdvanced - attacker correctly identified leaked source party\n")
 	reidenitificationSuccessNum = 1
-	// NEW: Log details of the first attack run before returning.
 	if attackCount == 0 {
 		logAttackDetailsToFile("advanced_attack_log.txt", "Advanced", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
 	}
@@ -830,7 +836,7 @@ func logAttackDetailsToFile(filename, attackType, sourcePartyID string, sourceSe
 	}
 
 	sb.WriteString("=====================================================\n")
-	sb.WriteString(fmt.Sprintf("         %s Attack Verification Log\n", attackType))
+	sb.WriteString(fmt.Sprintf("         %s Attack Verification Log - Block-Level \n", attackType))
 	sb.WriteString("=====================================================\n\n")
 
 	sb.WriteString(fmt.Sprintf("Attack Run: 1\n"))

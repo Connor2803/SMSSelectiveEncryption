@@ -230,6 +230,9 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 	// --- 2. Processing Phase ---
 	encryptionRatios := []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}
 
+	// Flags to track the first global success/failure across all ratios
+	var hasLoggedSuccess, hasLoggedFailure bool
+
 	for _, encRatio := range encryptionRatios {
 		for _, party := range P {
 			for blockIdx := 0; blockIdx < blockNum; blockIdx++ {
@@ -387,7 +390,7 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		// --- 3. Attack Phase --
 		// Reset house_sample for each encryption ratio iteration to collect new ASRs
-		currentRatioReidentificationAttackSuccessResults := []float64{} // Contains the results of each attack loop for a given encryption ratio.
+		currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio, &hasLoggedSuccess, &hasLoggedFailure)
 
 		reidPhaseStartTime := time.Now()
 
@@ -814,13 +817,13 @@ func encPhase(params ckks.Parameters, P []*Party, pk *rlwe.PublicKey, encoder ck
 	return encOutputs, encInputsSummation, encInputsNegative, encryptionTimes
 }
 
-func runReidentificationAttack(P []*Party, currentEncRatio float64) []float64 {
+func runReidentificationAttack(P []*Party, currentEncRatio float64, hasLoggedSuccess *bool, hasLoggedFailure *bool) []float64 {
 	var attackCount int
 	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
 
 	for attackCount = 0; attackCount < maxReidentificationAttempts; attackCount++ {
-		var successNum = identifySourceHousehold(P, currentEncRatio) // Integer result of one attack run.
-		successCounts = append(successCounts, float64(successNum))   // Stores the success count for this run.
+		var successNum = identifySourceHousehold(P, currentEncRatio, attackCount) // Integer result of one attack run.
+		successCounts = append(successCounts, float64(successNum))                // Stores the success count for this run.
 
 		// NOTE: These calculations are for internal stopping conditions, not for statistical purposes.
 		std, _, _ := calculateStandardDeviationAndMeanAndVariance(successCounts)
@@ -833,7 +836,7 @@ func runReidentificationAttack(P []*Party, currentEncRatio float64) []float64 {
 	return successCounts
 }
 
-func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccessNum int) {
+func identifySourceHousehold(P []*Party, currentEncRatio float64, attackCount int) (attackSuccessNum int) {
 	attackSuccessNum = 0
 	var randomParty int
 	var randomStart int
@@ -852,9 +855,16 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 		}
 	}
 
-	isSourceIdentifiable := isPartyIdentifiable(P[randomParty], attackerDataBlock, currentEncRatio)
+	sourceParty := P[randomParty]
+	sourcePartyID := filepath.Base(sourceParty.filename)
+
+	isSourceIdentifiable := isPartyIdentifiable(P[randomParty], attackerDataBlock)
 
 	if !isSourceIdentifiable {
+		if !(*hasLoggedFailure) {
+			logAttackDetailsToFile("household_attack_log_FAILURE.txt", "Household", sourcePartyID, randomStart, attackerDataBlock, sourceParty, attackSuccessNum, currentEncRatio)
+			*hasLoggedFailure = true
+		}
 		return 0
 	}
 
@@ -864,7 +874,7 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 		if partyIdx == randomParty {
 			continue
 		}
-		if isPartyIdentifiable(party, attackerDataBlock, currentEncRatio) {
+		if isPartyIdentifiable(party, attackerDataBlock) {
 			matchedHouseholds = append(matchedHouseholds, partyIdx)
 		}
 	}
@@ -872,46 +882,48 @@ func identifySourceHousehold(P []*Party, currentEncRatio float64) (attackSuccess
 	// A successful re-identification means only the original source was matched.
 	if len(matchedHouseholds) == 1 {
 		attackSuccessNum = 1
+	} else {
+		attackSuccessNum = 0 // Explicitly set to 0 for failure (multiple matches found)
+	}
+
+	if attackSuccessNum == 1 {
+		if !(*hasLoggedSuccess) {
+			logAttackDetailsToFile("household_attack_log_SUCCESS.txt", "Household", sourcePartyID, randomStart, attackerDataBlock, sourceParty, attackSuccessNum, currentEncRatio)
+			*hasLoggedSuccess = true
+		}
+	} else {
+		if !(*hasLoggedFailure) {
+			logAttackDetailsToFile("household_attack_log_FAILURE.txt", "Household", sourcePartyID, randomStart, attackerDataBlock, sourceParty, attackSuccessNum, currentEncRatio)
+			*hasLoggedFailure = true
+		}
 	}
 
 	return
 }
 
 // Helper function to check if a single party can be identified with the leaked block.
-func isPartyIdentifiable(targetParty *Party, attackerPlaintextBlock []float64, currentEncRatio float64) bool {
+func isPartyIdentifiable(targetParty *Party, attackerPlaintextBlock []float64) bool {
 	minMatchCount := math.Ceil(float64(len(attackerPlaintextBlock)) * float64(minPercentMatched) / 100.0)
-	numEncryptedBlocks := int(currentEncRatio * float64(blockNum))
-	firstPlaintextBlock := numEncryptedBlocks
 
-	for s := firstPlaintextBlock; s < blockNum; s++ {
-		blockStart := s * BlockSize
-		if blockStart >= len(targetParty.plainInput) {
-			continue
-		}
-		blockEnd := (s + 1) * BlockSize
-		if blockEnd > len(targetParty.plainInput) {
-			blockEnd = len(targetParty.plainInput)
-		}
-		targetBlockData := targetParty.plainInput[blockStart:blockEnd]
+	searchableData := targetParty.plainInput
+	if len(searchableData) < len(attackerPlaintextBlock) {
+		return false
+	}
 
-		if len(targetBlockData) < len(attackerPlaintextBlock) {
-			continue // Block is too small
-		}
-
-		for i := 0; i <= len(targetBlockData)-len(attackerPlaintextBlock); i++ {
-			targetWindow := targetBlockData[i : i+len(attackerPlaintextBlock)]
-			matchCount := 0
-			for k := 0; k < len(attackerPlaintextBlock); k++ {
-				if math.Abs(attackerPlaintextBlock[k]-targetWindow[k]) < 1e-9 {
-					matchCount++
-				}
+	for i := 0; i <= len(searchableData)-len(attackerPlaintextBlock); i++ {
+		targetWindow := searchableData[i : i+len(attackerPlaintextBlock)]
+		matchCount := 0
+		for k := 0; k < len(attackerPlaintextBlock); k++ {
+			if math.Abs(attackerPlaintextBlock[k]-targetWindow[k]) < 1e-9 {
+				matchCount++
 			}
-			if float64(matchCount) >= minMatchCount {
-				return true // A match was found
-			}
+		}
+		if float64(matchCount) >= minMatchCount {
+			return true // A match was found
 		}
 	}
-	return false // No match found in any plaintext block
+
+	return false // No match found
 }
 
 // getRandomStart is a helper function that returns an unused random start block for the Party
@@ -981,6 +993,65 @@ func uniqueDataBlock(P []*Party, arr []float64, party int, index int, inputType 
 		}
 	}
 	return unique
+}
+
+func logAttackDetailsToFile(filename string, attackType string, sourcePartyID string, sourceStartIndex int, attackerBlock []float64, sourceParty *Party, result int, currentEncRatio float64) {
+	var sb strings.Builder
+
+	resultStr := "FAILURE"
+	if result == 1 {
+		resultStr = "SUCCESS"
+	}
+
+	sb.WriteString("=====================================================\n")
+	sb.WriteString(fmt.Sprintf("         %s Attack Verification Log - Household-Level \n", attackType))
+	sb.WriteString("=====================================================\n\n")
+
+	sb.WriteString(fmt.Sprintf("Attack Run: 1\n"))
+	sb.WriteString(fmt.Sprintf("Current Encryption Ratio: %.2f\n", currentEncRatio))
+	sb.WriteString(fmt.Sprintf("Leaked From Household: %s\n", sourcePartyID))
+	sb.WriteString(fmt.Sprintf("Leaked From Raw Data Start Index: %d\n", sourceStartIndex))
+	sb.WriteString(fmt.Sprintf("Attack Result: %s\n\n", resultStr))
+
+	sb.WriteString(fmt.Sprintf("--- Attacker's Data Block (Size: %d) ---\n", len(attackerBlock)))
+	sb.WriteString(fmt.Sprintf("%v\n\n", attackerBlock))
+
+	sb.WriteString(fmt.Sprintf("--- Source Household Data State (ID: %s) ---\n\n", sourcePartyID))
+
+	numEncryptedBlocks := int(currentEncRatio * float64(blockNum))
+	firstPlaintextBlock := numEncryptedBlocks
+
+	sb.WriteString(fmt.Sprintf("Total Blocks: %d\n", blockNum))
+	sb.WriteString(fmt.Sprintf("Encrypted Blocks (not searchable by attacker): 0 to %d\n", numEncryptedBlocks-1))
+	sb.WriteString(fmt.Sprintf("Plaintext Blocks (searchable by attacker): %d to %d\n\n", firstPlaintextBlock, blockNum-1))
+
+	var plainInputIndex = 0
+	for blockIdx := firstPlaintextBlock; blockIdx < blockNum; blockIdx++ {
+		blockStart := blockIdx * BlockSize
+		if blockStart >= len(sourceParty.rawInput) {
+			continue
+		}
+		blockEnd := (blockIdx + 1) * BlockSize
+		if blockEnd > len(sourceParty.rawInput) {
+			blockEnd = len(sourceParty.rawInput)
+		}
+
+		currentBlockSize := blockEnd - blockStart
+		if plainInputIndex+currentBlockSize > len(sourceParty.plainInput) {
+			continue
+		}
+
+		blockData := sourceParty.plainInput[plainInputIndex : plainInputIndex+currentBlockSize]
+		plainInputIndex += currentBlockSize
+
+		sb.WriteString(fmt.Sprintf("[Plaintext Block %d] (%d values)\n", blockIdx, len(blockData)))
+		sb.WriteString(fmt.Sprintf("  - Data: %v\n\n", blockData))
+	}
+
+	err := os.WriteFile(filename, []byte(sb.String()), 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to write attack log to file %s: %v\n", filename, err)
+	}
 }
 
 func calculateStandardDeviationAndMeanAndVariance(numbers []float64) (standardDeviation, mean, variance float64) {

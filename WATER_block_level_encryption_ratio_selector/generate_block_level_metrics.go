@@ -4,8 +4,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/tuneinsight/lattigo/v4/ckks"
-	"github.com/tuneinsight/lattigo/v4/rlwe"
 	utils "lattigo"
 	"log"
 	"math"
@@ -14,8 +12,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/tuneinsight/lattigo/v4/ckks"
+	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
 type RLChoice struct {
@@ -117,7 +120,8 @@ func main() {
 
 	// 3. Load raw data from the master inputs.csv file
 	fmt.Fprintf(os.Stderr, "DEBUG: Starting to load data from inputs CSV...\n")
-	inputCSVPath := filepath.Join(getExecutableDir(), "inputs.csv")
+	dir, err := os.Getwd()
+	inputCSVPath := filepath.Join(dir, "WATER_block_level_encryption_ratio_selector", "inputs.csv")
 	parties, err := loadDataFromInputsCSV(inputCSVPath, choices)
 	check(err)
 
@@ -435,6 +439,10 @@ func performHEEncryption(params ckks.Parameters, parties map[string]*Party, pk *
 			readings := section.readings
 			encryptCount := int(float64(len(readings)) * section.encryptionRatio)
 			if encryptCount == 0 {
+				section.unencryptedReadings = make([]float64, len(readings))
+				copy(section.unencryptedReadings, readings)
+				section.encryptedReadings = []float64{}
+				section.encryptedReadingsIndices = make(map[int]bool)
 				continue
 			}
 			tmpEncryptedReadings := make([]float64, encryptCount)
@@ -495,11 +503,16 @@ func runReidentificationAttack(parties map[string]*Party) ([]float64, []float64)
 		partyIDs = append(partyIDs, id)
 	}
 
+	var hasLoggedSuccess, hasLoggedFailure bool
+	var hasLoggedAdvancedSuccess, hasLoggedAdvancedFailure bool
+
 	for attackCount = 0; attackCount < maxReidentificationAttempts; attackCount++ {
 		fmt.Fprintf(os.Stderr, "DEBUG: runReidentificationAttack - Attempt loop %d/%d\n", attackCount+1, maxReidentificationAttempts)
-		var successNum = identifySourceHousehold(parties, partyIDs) // Integer result of one attack run.
+		var successNum = identifySourceHousehold(parties, partyIDs, &hasLoggedSuccess, &hasLoggedFailure)
+
 		fmt.Fprintf(os.Stderr, "DEBUG: runReidentificationAttack - finished section-level attack\n")
-		var advancedSuccessNum = identifySourceHouseholdAdvanced(parties, partyIDs)
+		var advancedSuccessNum = identifySourceHouseholdAdvanced(parties, partyIDs, &hasLoggedAdvancedSuccess, &hasLoggedAdvancedFailure)
+
 		fmt.Fprintf(os.Stderr, "DEBUG: runReidentificationAttack - finished advanced attack\n")
 		successCounts = append(successCounts, float64(successNum)) // Stores the success count for this run.
 		advancedSuccessCounts = append(advancedSuccessCounts, float64(advancedSuccessNum))
@@ -518,7 +531,7 @@ func runReidentificationAttack(parties map[string]*Party) ([]float64, []float64)
 	return successCounts, advancedSuccessCounts
 }
 
-func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reidenitificationSuccessNum int) {
+func identifySourceHousehold(parties map[string]*Party, partyIDs []string, hasLoggedSuccess *bool, hasLoggedFailure *bool) (reidenitificationSuccessNum int) {
 	reidenitificationSuccessNum = 0
 	var valid bool
 	var randomPartyID string
@@ -530,6 +543,10 @@ func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reid
 		iteration++
 		if iteration > 500 {
 			fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - could not identify a unique block\n")
+			if !(*hasLoggedFailure) {
+				logAttackDetailsToFile("normal_attack_log_FAILURE.txt", "Normal (No Unique Block)", "N/A", -1, nil, nil, 0)
+				*hasLoggedFailure = true
+			}
 			return 0 // Cannot find a unique block, fail this run early.
 		}
 		randomPartyID = partyIDs[rand.Intn(len(partyIDs))]
@@ -551,7 +568,12 @@ func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reid
 	sourceParty := parties[randomPartyID]
 	if !isPartyIdentifiable(sourceParty, attackerDataBlock) {
 		fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - attacker did not identify leaked source party\n")
-		return 0
+		reidenitificationSuccessNum = 0
+		if !(*hasLoggedFailure) {
+			logAttackDetailsToFile("normal_attack_log_FAILURE.txt", "Normal", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+			*hasLoggedFailure = true
+		}
+		return
 	}
 
 	for _, partyID := range partyIDs {
@@ -564,14 +586,24 @@ func identifySourceHousehold(parties map[string]*Party, partyIDs []string) (reid
 		targetParty := parties[partyID]
 		if isPartyIdentifiable(targetParty, attackerDataBlock) {
 			fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - attacker identified multiple parties as leaked source\n")
-			return 0
+			reidenitificationSuccessNum = 0
+			if !(*hasLoggedFailure) {
+				logAttackDetailsToFile("normal_attack_log_FAILURE.txt", "Normal", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+				*hasLoggedFailure = true
+			}
+			return
 		}
 	}
 	fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHousehold - attacker correctly identified leaked source party\n")
-	return 1
+	reidenitificationSuccessNum = 1
+	if !(*hasLoggedSuccess) {
+		logAttackDetailsToFile("normal_attack_log_SUCCESS.txt", "Normal", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+		*hasLoggedSuccess = true
+	}
+	return
 }
 
-func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []string) (reidenitificationSuccessNum int) {
+func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []string, hasLoggedSuccess *bool, hasLoggedFailure *bool) (reidenitificationSuccessNum int) {
 	var valid bool
 	var randomPartyID string
 	var randomSectionIndex, offset int
@@ -582,6 +614,10 @@ func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []strin
 		iteration++
 		if iteration > 500 {
 			fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHouseholdAdvanced - could not identify a unique block\n")
+			if !(*hasLoggedFailure) {
+				logAttackDetailsToFile("advanced_attack_log_FAILURE.txt", "Advanced (No Unique Block)", "N/A", -1, nil, nil, 0)
+				*hasLoggedFailure = true
+			}
 			return 0 // Cannot find a unique block, fail this run
 		}
 		randomPartyID = partyIDs[rand.Intn(len(partyIDs))]
@@ -600,7 +636,12 @@ func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []strin
 	sourceParty := parties[randomPartyID]
 	if !isPartyIdentifiableAdvanced(sourceParty, attackerDataBlock) {
 		fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHouseholdAdvanced - attacker did not identify leaked source party\n")
-		return 0 // Attack fails: Source not identifiable.
+		reidenitificationSuccessNum = 0 // Attack fails: Source not identifiable.
+		if !(*hasLoggedFailure) {
+			logAttackDetailsToFile("advanced_attack_log_FAILURE.txt", "Advanced", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+			*hasLoggedFailure = true
+		}
+		return
 	}
 
 	for _, partyID := range partyIDs {
@@ -611,11 +652,21 @@ func identifySourceHouseholdAdvanced(parties map[string]*Party, partyIDs []strin
 		targetParty := parties[partyID]
 		if isPartyIdentifiableAdvanced(targetParty, attackerDataBlock) {
 			fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHouseholdAdvanced - attacker identified multiple parties as leaked source\n")
-			return 0
+			reidenitificationSuccessNum = 0
+			if !(*hasLoggedFailure) {
+				logAttackDetailsToFile("advanced_attack_log_FAILURE.txt", "Advanced", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+				*hasLoggedFailure = true
+			}
+			return
 		}
 	}
 	fmt.Fprintf(os.Stderr, "DEBUG: identifySourceHouseholdAdvanced - attacker correctly identified leaked source party\n")
-	return 1
+	reidenitificationSuccessNum = 1
+	if !(*hasLoggedSuccess) {
+		logAttackDetailsToFile("advanced_attack_log_SUCCESS.txt", "Advanced", randomPartyID, randomSectionIndex, attackerDataBlock, sourceParty, reidenitificationSuccessNum)
+		*hasLoggedSuccess = true
+	}
+	return
 }
 
 // getRandomSection is a helper function that returns an unused random start block/section for the Party
@@ -767,6 +818,9 @@ func isPartyIdentifiableAdvanced(party *Party, attackerPlainTextBlock []float64)
 }
 
 func calculateStandardDeviationAndMeanAndVariance(numbers []float64) (standardDeviation, mean, variance float64) {
+	if len(numbers) < 2 {
+		return 0, 0, 0
+	}
 	var sum float64
 	for _, num := range numbers {
 		sum += num
@@ -784,4 +838,49 @@ func calculateStandardDeviationAndMeanAndVariance(numbers []float64) (standardDe
 	standardDeviation = math.Sqrt(variance)
 
 	return standardDeviation, mean, variance
+}
+
+func logAttackDetailsToFile(filename, attackType, sourcePartyID string, sourceSectionIndex int, attackerBlock []float64, sourceParty *Party, result int) {
+	var sb strings.Builder
+
+	resultStr := "FAILURE"
+	if result == 1 {
+		resultStr = "SUCCESS"
+	}
+
+	sb.WriteString("=====================================================\n")
+	sb.WriteString(fmt.Sprintf("         %s Attack Verification Log - Block-Level \n", attackType))
+	sb.WriteString("=====================================================\n\n")
+
+	sb.WriteString(fmt.Sprintf("Leaked From Household: %s\n", sourcePartyID))
+	sb.WriteString(fmt.Sprintf("Leaked From Section: %d\n", sourceSectionIndex))
+	sb.WriteString(fmt.Sprintf("Attack Result: %s\n\n", resultStr))
+
+	sb.WriteString(fmt.Sprintf("--- Attacker's Data Block (Size: %d) ---\n", len(attackerBlock)))
+	sb.WriteString(fmt.Sprintf("%v\n\n", attackerBlock))
+
+	if sourceParty == nil {
+		sb.WriteString(fmt.Sprintf("--- Source Household Data State (ID: %s) ---\n\n", sourcePartyID))
+		sb.WriteString("Source party data is not available (e.g., failed to find a unique block for the attack).\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("--- Source Household Data State (ID: %s) ---\n\n", sourcePartyID))
+
+		sectionKeys := make([]int, 0, len(sourceParty.sections))
+		for k := range sourceParty.sections {
+			sectionKeys = append(sectionKeys, k)
+		}
+		sort.Ints(sectionKeys)
+
+		for _, key := range sectionKeys {
+			section := sourceParty.sections[key]
+			sb.WriteString(fmt.Sprintf("[Section %d]\n", key))
+			sb.WriteString(fmt.Sprintf("  - Unencrypted Readings (%d values): %v\n", len(section.unencryptedReadings), section.unencryptedReadings))
+			sb.WriteString(fmt.Sprintf("  - Encrypted Readings (%d values): %v\n\n", len(section.encryptedReadings), section.encryptedReadings))
+		}
+	}
+
+	err := os.WriteFile(filename, []byte(sb.String()), 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to write attack log to file %s: %v\n", filename, err)
+	}
 }
