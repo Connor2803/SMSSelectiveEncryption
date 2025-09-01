@@ -981,7 +981,7 @@ def call_validation_phase(current_leaked_plaintext_size: str, current_policy_pen
 
 def call_testing_phase(current_leaked_plaintext_size: str, current_policy_penalty: int):
     model = DQN.load(
-        f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}")
+        f"./ELECTRICITY_block_level_encryption_ratio_selector_with_policy/DQN_Policied_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}_{current_policy_penalty}.zip")
     env_test_combined = EncryptionSelectorEnv(dataset_type="test", current_leaked_plaintext_size=current_leaked_plaintext_size, policy_penalty=current_policy_penalty)
     env_test_combined.reset()
     model.set_env(env_test_combined)

@@ -390,14 +390,14 @@ func process(fileList []string, params ckks.Parameters, metricsWriter *csv.Write
 
 		// --- 3. Attack Phase --
 		// Reset house_sample for each encryption ratio iteration to collect new ASRs
-		currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio, &hasLoggedSuccess, &hasLoggedFailure)
+		var currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio, &hasLoggedSuccess, &hasLoggedFailure)
 
 		reidPhaseStartTime := time.Now()
 
 		// After all households/parties and blocks have had the current encryption ratio applied,
 		// Run the member identification attack.
 		fmt.Printf("\n--- Starting Attack Phase for Encryption Ratio: %.2f ---\n", encRatio)
-		currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio)
+		currentRatioReidentificationAttackSuccessResults = runReidentificationAttack(P, encRatio, &hasLoggedSuccess, &hasLoggedFailure)
 
 		// Calculate ASR mean and standard error for the current encryption ratio
 		reidRaterMean := 0.0
@@ -822,8 +822,8 @@ func runReidentificationAttack(P []*Party, currentEncRatio float64, hasLoggedSuc
 	var successCounts = []float64{} // Collects the number of successful attacks for each loop.
 
 	for attackCount = 0; attackCount < maxReidentificationAttempts; attackCount++ {
-		var successNum = identifySourceHousehold(P, currentEncRatio, attackCount) // Integer result of one attack run.
-		successCounts = append(successCounts, float64(successNum))                // Stores the success count for this run.
+		var successNum = identifySourceHousehold(P, currentEncRatio, hasLoggedSuccess, hasLoggedFailure) // Integer result of one attack run.
+		successCounts = append(successCounts, float64(successNum))                                       // Stores the success count for this run.
 
 		// NOTE: These calculations are for internal stopping conditions, not for statistical purposes.
 		std, _, _ := calculateStandardDeviationAndMeanAndVariance(successCounts)
@@ -836,7 +836,7 @@ func runReidentificationAttack(P []*Party, currentEncRatio float64, hasLoggedSuc
 	return successCounts
 }
 
-func identifySourceHousehold(P []*Party, currentEncRatio float64, attackCount int) (attackSuccessNum int) {
+func identifySourceHousehold(P []*Party, currentEncRatio float64, hasLoggedSuccess *bool, hasLoggedFailure *bool) (attackSuccessNum int) {
 	attackSuccessNum = 0
 	var randomParty int
 	var randomStart int

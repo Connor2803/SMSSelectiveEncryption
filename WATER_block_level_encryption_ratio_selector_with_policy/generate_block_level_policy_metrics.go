@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/tuneinsight/lattigo/v4/ckks"
-	"github.com/tuneinsight/lattigo/v4/drlwe"
 	"github.com/tuneinsight/lattigo/v4/rlwe"
 )
 
@@ -492,7 +491,7 @@ func performHEEncryption(params ckks.Parameters, parties map[string]*Party, pk *
 			section.unencryptedReadings = tmpPlaintTextReadings
 
 		}
-		parties[partyID].encryptionTime = time.Since(start).Nanoseconds()
+		parties[partyID].encryptionTime = time.Since(start)
 	}
 	return encOutputs, encInputsSummation, encInputsNegative
 }

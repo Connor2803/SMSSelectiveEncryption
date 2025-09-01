@@ -1,0 +1,10 @@
+household_id,Encryption Ratio_mean,Encryption Ratio_std,Reidentification Rate_mean,Reidentification Rate_std,Advanced Reidentification Rate_mean,Advanced Reidentification Rate_std,Memory Consumption (MiB)_mean,Memory Consumption (MiB)_std,Summation Error_mean,Summation Error_std,Deviation Error_mean,Deviation Error_std,Encryption Time (NS)_mean,Encryption Time (NS)_std,Decryption Time (NS)_mean,Decryption Time (NS)_std,Summation Operations Time (NS)_mean,Summation Operations Time (NS)_std,Deviation Operations Time (NS)_mean,Deviation Operations Time (NS)_std
+e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv,0.8,0.0,0.003,0.0,0.0,0.0,6.0,0.0,154858.615385,0.0,273.067611,0.0,5149700.0,0.0,0.0,0.0,0.0,0.0,3588400.0,0.0
+e363b1f3-f503-48b4-b87c-98fe07632c02.csv,0.1,0.0,0.003,0.0,0.0,0.0,6.0,0.0,2.0,0.0,2.741505,0.0,11384300.0,0.0,0.0,0.0,9100100.0,0.0,10071400.0,0.0
+e41dddd2-87dd-4d4b-bdb6-9859c34768f1.csv,0.31,0.0,0.003,0.0,0.0,0.0,6.0,0.0,21223.846154,0.0,83.407375,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+e76658cf-88ea-4123-8715-0248909dd88b.csv,0.8,0.0,0.003,0.0,0.0,0.0,6.0,0.0,94324.846154,0.0,172.35378,0.0,7250800.0,0.0,0.0,0.0,0.0,0.0,6715300.0,0.0
+f12f91f7-81ca-4b7c-a5e8-3b81c4e5720b.csv,0.8,0.0,0.003,0.0,0.0,0.0,6.0,0.0,92124.153846,0.0,188.476862,0.0,3039400.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+f45ff6bf-08c4-450d-bbf3-5597f66c68ba.csv,0.8,0.0,0.003,0.0,0.0,0.0,6.0,0.0,84430.076923,0.0,153.727735,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+f5850315-552a-440f-9871-173212ad467f.csv,0.7300000000000001,0.0,0.003,0.0,0.0,0.0,6.0,0.0,95992.846154,0.0,182.685974,0.0,11363400.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+f5a28746-11f7-423f-9ae0-204a9b6d50ac.csv,0.52,0.0,0.003,0.0,0.0,0.0,6.0,0.0,56508.384615,0.0,127.594444,0.0,2537200.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+faea8eb7-c134-4c8b-99ac-c2c7ddd60d8b.csv,0.1,0.0,0.003,0.0,0.0,0.0,6.0,0.0,916.230769,0.0,71.674626,0.0,5217300.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0

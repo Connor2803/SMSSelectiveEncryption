@@ -98,6 +98,7 @@ def run_single_test_and_get_results(leaked_plaintext_size: str, folder_name: str
     command = ["python", f"./{folder_name}/{model_name}.py", leaked_plaintext_size]
     if policy_penalty:
         command.append(policy_penalty)
+
     command.append("testing")
 
     log_filename_suffix = f"{leaked_plaintext_size}"
@@ -196,10 +197,10 @@ def main():
     folder_names = [
         # "ELECTRICITY_household_level_encryption_ratio_selector",
         # "WATER_household_level_encryption_ratio_selector",
-        "ELECTRICITY_block_level_encryption_ratio_selector",
-        "WATER_block_level_encryption_ratio_selector",
+        # "ELECTRICITY_block_level_encryption_ratio_selector",
+        # "WATER_block_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",
-        # "WATER_block_level_encryption_ratio_selector_with_policy"
+        "WATER_block_level_encryption_ratio_selector_with_policy"
     ]
 
     print(f"Starting comparison of {number_of_runs} test runs for leaked plaintext size of {leaked_plaintext_size}\n")

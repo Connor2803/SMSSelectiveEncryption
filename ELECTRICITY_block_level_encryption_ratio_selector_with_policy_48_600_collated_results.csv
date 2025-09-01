@@ -1,0 +1,11 @@
+household_id,Encryption Ratio_mean,Encryption Ratio_std,Reidentification Rate_mean,Reidentification Rate_std,Advanced Reidentification Rate_mean,Advanced Reidentification Rate_std,Memory Consumption (MiB)_mean,Memory Consumption (MiB)_std,Summation Error_mean,Summation Error_std,Deviation Error_mean,Deviation Error_std,Encryption Time (NS)_mean,Encryption Time (NS)_std,Decryption Time (NS)_mean,Decryption Time (NS)_std,Summation Operations Time (NS)_mean,Summation Operations Time (NS)_std,Deviation Operations Time (NS)_mean,Deviation Operations Time (NS)_std
+MAC000248.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000252.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000253.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000255.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000256.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000258.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000271.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000272.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC000274.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+MAC004539.csv,0.0,0.0,0.0,0.0,0.0,0.0,11.5,0.5270462766947305,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
