@@ -12,7 +12,7 @@ import (
 	"github.com/tuneinsight/lattigo/v4/ckks"
 )
 
-func main() {
+func seriesBreakMain() {
 	paramsDef := ckks.PN14QP438
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
 	check(err)
@@ -22,13 +22,8 @@ func main() {
 	if len(os.Args) > 1 {
 		if parsedRuns, err := strconv.Atoi(os.Args[1]); err == nil && parsedRuns > 0 {
 			runs = parsedRuns
-		} else {
-			//fmt.printf("Invalid number of runs: %s. Using default of 1.\n", os.Args[1])
 		}
 	}
-
-	//fmt.printf("=== SERIES BREAKING ALGORITHM TEST ===\n")
-	//fmt.printf("Running %d test iteration(s)...\n\n", runs)
 
 	testSeriesBreakingAlgorithms(params, runs)
 }

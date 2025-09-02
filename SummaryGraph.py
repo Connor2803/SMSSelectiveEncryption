@@ -506,14 +506,92 @@ KEY FINDINGS
     plt.savefig(f'{output_prefix}_thesis.png', dpi=300, bbox_inches='tight')
     plt.show()
 
+def create_methods_explainer(output_path="methods_explainer.png"):
+    """
+    Three panels: Baseline, Sliding Window (T=0.05), Adaptive Pattern (T=0.05).
+    Shows Raw, Value Change (Δ), and Modified, with Σ and Σ|Δ| annotations.
+    """
+    plt.style.use('seaborn-v0_8')
+
+    # Baseline example
+    baseline = np.array([6.0, 7.0, 5.0, 7.0, 5.0], dtype=float)  # a distinctive run
+    # Sliding-window example (window of 4 here)
+    sliding_raw = np.array([4.0, 5.0, 6.0, 5.0], dtype=float)
+    T = 0.05
+
+    def zero_sum_redistribution(values, T, seed=42):
+        S = float(np.sum(values))
+        budget = S * T  # sum of absolute changes
+        rng = np.random.default_rng(seed)
+        n = len(values)
+        # split half positive, half negative mass
+        k_pos = n // 2
+        k_neg = n - k_pos
+        w_pos = rng.random(k_pos); w_pos = w_pos / w_pos.sum() if w_pos.sum() > 0 else np.ones(k_pos)/k_pos
+        w_neg = rng.random(k_neg); w_neg = w_neg / w_neg.sum() if w_neg.sum() > 0 else np.ones(k_neg)/k_neg
+        pos = budget/2 * w_pos
+        neg = budget/2 * w_neg
+        deltas = np.zeros(n)
+        deltas[:k_pos] = pos
+        deltas[k_pos:] = -neg
+        # shuffle so it doesn't always affect the first half
+        rng.shuffle(deltas)
+        return deltas
+
+    # Sliding changes: Σ|Δ| = Σ·T, ΣΔ = 0
+    slide_delta = zero_sum_redistribution(sliding_raw, T, seed=1)
+    slide_mod = sliding_raw + slide_delta
+
+    # Adaptive example: target the 5-length distinctive span and scale by "uniqueness"
+    adaptive_raw = baseline.copy()
+    uniqueness = 1.0  # illustrative high uniqueness
+    adaptive_budget_scale = (1.0 + uniqueness)  # matches applyAdaptiveBreaking
+    adapt_delta = zero_sum_redistribution(adaptive_raw, T * adaptive_budget_scale, seed=2)
+    adapt_mod = adaptive_raw + adapt_delta
+
+    fig, axes = plt.subplots(3, 1, figsize=(12, 9))
+    # Panel 1: Baseline (susceptible)
+    ax = axes[0]
+    ax.stem(range(len(baseline)), baseline, basefmt=" ")
+    ax.set_title("Baseline (Raw) — distinctive run is easily matched by attacker (4-seq exact matches)")
+    ax.set_xticks(range(len(baseline))); ax.set_ylabel("kWh")
+    ax.text(0.98, 0.80, f"Σ = {baseline.sum():.1f}", transform=ax.transAxes, ha="right")
+
+    # Panel 2: Sliding Window
+    ax = axes[1]
+    ax.plot(sliding_raw, 'k.-', label='Raw')
+    ax.plot(slide_mod, 'C0o-', label='Modified')
+    ax.vlines(range(len(slide_delta)), sliding_raw, slide_mod, colors='C0', alpha=0.7, linewidth=3)
+    ax.set_title(f"Sliding Window (T={T:.02f}) — redistribute Σ·T within window, totals preserved")
+    ax.set_xticks(range(len(sliding_raw))); ax.set_ylabel("kWh")
+    ax.legend(loc="upper left")
+    ax.text(0.98, 0.80, f"Σ = {sliding_raw.sum():.1f} → {slide_mod.sum():.1f}", transform=ax.transAxes, ha="right")
+    ax.text(0.98, 0.68, f"Σ|Δ| = {abs(slide_delta).sum():.2f} ≈ Σ·T = {sliding_raw.sum()*T:.2f}", transform=ax.transAxes, ha="right")
+
+    # Panel 3: Adaptive Pattern
+    ax = axes[2]
+    ax.plot(adaptive_raw, 'k.-', label='Raw')
+    ax.plot(adapt_mod, 'C1s-', label='Modified')
+    ax.vlines(range(len(adapt_delta)), adaptive_raw, adapt_mod, colors='C1', alpha=0.7, linewidth=3)
+    ax.set_title(f"Adaptive Pattern (T={T:.02f}, uniqueness scale≈{adaptive_budget_scale:.1f}) — stronger redistribution on unique spans")
+    ax.set_xticks(range(len(adaptive_raw))); ax.set_xlabel("Time index"); ax.set_ylabel("kWh")
+    ax.legend(loc="upper left")
+    ax.text(0.98, 0.80, f"Σ = {adaptive_raw.sum():.1f} → {adapt_mod.sum():.1f}", transform=ax.transAxes, ha="right")
+    ax.text(0.98, 0.68, f"Σ|Δ| = {abs(adapt_delta).sum():.2f} (scaled by uniqueness)", transform=ax.transAxes, ha="right")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
 if __name__ == "__main__":
     # Load the data
     csv_file = "compiled.csv"
     df = load_and_process_data(csv_file)
 
     # Only generate the new summary figure
-    create_newsummary_plot(df, output_path="newsummary.png")
-    
+    #create_newsummary_plot(df, output_path="newsummary.png")
+    create_methods_explainer()
+
     print("\n=== KEY FINDINGS ===")
     best_security = df.loc[df['ASR_Reduction_%'].idxmax()]
     print(f"Best Security: {best_security['Approach']} at {best_security['Tolerance_%']}% tolerance")
