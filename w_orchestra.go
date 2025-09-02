@@ -5,22 +5,47 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tuneinsight/lattigo/v4/ckks"
 )
 
-// Flags: choose breaking approach, tolerance, encryption ratio, attack loops
+// Flags: choose breaking approach, tolerance(s), encryption ratio(s), attack loops
 var (
-	flagApproach = flag.String("approach", "adaptive", "sliding | adaptive")
-	flagTol      = flag.Float64("tol", 0.30, "series-breaking tolerance in [0,1]")
-	flagRatio    = flag.Int("ratio", 60, "encryption ratio percent")
-	flagLoops    = flag.Int("loops", 200, "attack loops for ASR estimate")
+	flagApproach  = flag.String("approach", "adaptive", "sliding | adaptive")
+	flagTol       = flag.Float64("tol", 0.30, "single tolerance in [0,1]")
+	flagTols      = flag.String("tols", "", "comma-separated tolerances, e.g. 0.25,0.30,0.35")
+	flagRatio     = flag.Int("ratio", 60, "single encryption ratio percent")
+	flagRatios    = flag.String("ratios", "", "comma-separated ratios, e.g. 35,40,45")
+	flagLoops     = flag.Int("loops", 200, "attack loops for ASR estimate")
+	flagATD       = flag.Int("atd", 24, "attacker leaked block size (samples)")
+	flagShowDebug = flag.Bool("debug", true, "print encryption coverage/debug info")
 )
 
 func main() {
 	flag.Parse()
+
+	// Resolve tolerance list
+	tolVals := []float64{}
+	if strings.TrimSpace(*flagTols) != "" {
+		var err error
+		tolVals, err = parseFloatList(*flagTols)
+		check(err)
+	} else {
+		tolVals = []float64{*flagTol}
+	}
+
+	// Resolve ratio list
+	ratioVals := []int{}
+	if strings.TrimSpace(*flagRatios) != "" {
+		var err error
+		ratioVals, err = parseIntList(*flagRatios)
+		check(err)
+	} else {
+		ratioVals = []int{*flagRatio}
+	}
 
 	// Dataset and global thresholds
 	currentDataset = DATASET_ELECTRICITY
@@ -32,15 +57,33 @@ func main() {
 	if len(fileList) == 0 {
 		panic("no dataset files found")
 	}
-	data := loadMatrix(fileList) // [][]float64
+	original := loadMatrix(fileList) // [][]float64
 
-	// 2) Series breaking
+	// Iterate all combinations
+	fmt.Printf("Combinations: %d tolerances × %d ratios, loops=%d, atdSize=%d, approach=%s\n",
+		len(tolVals), len(ratioVals), *flagLoops, *flagATD, *flagApproach)
+
+	for _, tol := range tolVals {
+		for _, ratio := range ratioVals {
+			asr, took := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagShowDebug)
+			fmt.Printf("Result: approach=%s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d, time=%s)\n",
+				*flagApproach, tol, ratio, asr, *flagLoops, took)
+		}
+	}
+}
+
+// Run a single (tol, ratio) combo end-to-end and return ASR
+func runOneCombo(original [][]float64, fileList []string, approach string, tol float64, ratio int, loops int, atd int, showDebug bool) (float64, time.Duration) {
+	comboStart := time.Now()
+	// 2) Series breaking from original each time (no carry-over)
 	var broken [][]float64
-	switch strings.ToLower(*flagApproach) {
+	switch strings.ToLower(approach) {
 	case "sliding":
-		broken = applyWindowBasedBreaking(data, *flagTol)
+		broken = applyWindowBasedBreaking(original, tol)
 	case "adaptive":
-		broken = applyAdaptivePatternBreaking(data, *flagTol)
+		broken = applyAdaptivePatternBreaking(original, tol)
+	case "none":
+		broken = original
 	default:
 		panic("approach must be sliding|adaptive")
 	}
@@ -53,7 +96,8 @@ func main() {
 	P := genparties(params, fileList)
 	generateInputsFromMatrix(P, broken) // fills rawInput, greedyInputs/Flags, etc.
 
-	encryptionRatio = *flagRatio
+	// 4) Uniqueness-based selective encryption (greedy)
+	encryptionRatio = ratio
 	runGreedyUniqSelectionAndEncrypt(P)
 
 	// Force the attacker to read the encrypted stream
@@ -63,22 +107,24 @@ func main() {
 		po.rawInput = buf
 	}
 
-	// Configure attacker globals (same as test harness expectations)
-	uniqueATD = 0                // allow non-unique leaked blocks
-	atdSize = 24                 // leaked block length (set > 1)
-	maxHouseholdsNumber = len(P) // use all parties
+	// Configure attacker globals
+	uniqueATD = 0
+	atdSize = atd
+	maxHouseholdsNumber = len(P)
 	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
 
-	// Debug: how much did we actually encrypt?
-	total, enc := countEncrypted(P)
-	fmt.Printf("Debug: encrypted %d/%d samples (%.1f%%), atdSize=%d\n",
-		enc, total, 100.0*float64(enc)/float64(total), atdSize)
+	if showDebug {
+		total, enc := countEncrypted(P)
+		wAll, wMasked, wClean := windowMaskStats(P, atdSize)
+		fmt.Printf("Debug: T=%.2f, ratio=%d%% → encrypted %d/%d (%.1f%%), windows masked=%.2f%% clean=%.2f%%\n",
+			tol, ratio, enc, total, 100.0*float64(enc)/float64(total),
+			100.0*float64(wMasked)/float64(wAll),
+			100.0*float64(wClean)/float64(wAll))
+	}
 
 	// 5) Run attacker loops on encrypted stream
-	asr := runAttackAverage(P, *flagLoops)
-
-	fmt.Printf("Break→Uniq pipeline: %s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d)\n",
-		*flagApproach, *flagTol, *flagRatio, asr, *flagLoops)
+	asr := runAttackAverage(P, loops)
+	return asr, time.Since(comboStart)
 }
 
 func countEncrypted(P []*party) (total, encrypted int) {
@@ -191,7 +237,6 @@ func runGreedyUniqSelectionAndEncrypt(P []*party) {
 				}
 			}
 		}
-		// deterministic order is fine; could shuffle
 		for _, p := range pool {
 			P[p.pi].greedyFlags[p.si][p.idx] = 1
 			markedNumbers++
@@ -218,6 +263,70 @@ func runAttackAverage(P []*party, loops int) float64 {
 	}
 	elapsedTime += time.Since(start)
 	return float64(success) / float64(cnt)
+}
+
+// Window coverage stats (for debug)
+func windowMaskStats(P []*party, L int) (total, masked, clean int) {
+	for _, po := range P {
+		n := len(po.encryptedInput)
+		for s := 0; s+L <= n; s++ {
+			total++
+			hasMask := false
+			for k := 0; k < L; k++ {
+				if po.encryptedInput[s+k] == -0.1 {
+					hasMask = true
+					break
+				}
+			}
+			if hasMask {
+				masked++
+			} else {
+				clean++
+			}
+		}
+	}
+	return
+}
+
+// Helpers to parse lists
+func parseFloatList(s string) ([]float64, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]float64, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		v, err := strconv.ParseFloat(p, 64)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse float %q: %w", p, err)
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func parseIntList(s string) ([]int, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		v, err := strconv.Atoi(p)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse int %q: %w", p, err)
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // Optional helper if you later sort selections by score
