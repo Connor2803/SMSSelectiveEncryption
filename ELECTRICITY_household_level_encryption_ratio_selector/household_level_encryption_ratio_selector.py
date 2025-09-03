@@ -562,10 +562,8 @@ def main():
 
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
-
-    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
-    if user_chosen_phase_type == "training":
-        try:
+    
+    try:
             subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to compile Go program: {e}")
@@ -586,6 +584,9 @@ def main():
             print(f"Stderr: {e.stderr}")
             return
 
+
+    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
+    if user_chosen_phase_type == "training":
         print("\nStarting training phase...")
         start_training_time = time.time()
         call_training_phase(current_leaked_plaintext_size)

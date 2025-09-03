@@ -196,11 +196,11 @@ def main():
 
     folder_names = [
         # "ELECTRICITY_household_level_encryption_ratio_selector",
-        # "WATER_household_level_encryption_ratio_selector",
+        "WATER_household_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector",
         # "WATER_block_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",
-        "WATER_block_level_encryption_ratio_selector_with_policy"
+        # "WATER_block_level_encryption_ratio_selector_with_policy"
     ]
 
     print(f"Starting comparison of {number_of_runs} test runs for leaked plaintext size of {leaked_plaintext_size}\n")
@@ -227,7 +227,7 @@ def main():
                 go_dataset = "1"
             try:
                 go_program_path = f"./{folder_name}/generate_household_level_metrics.go"
-                subprocess.run(["go", "run", go_program_path, go_dataset, leaked_plaintext_size],
+                subprocess.run(["go", "run", go_program_path, go_dataset, leaked_plaintext_size, "testing"],
                                check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: The Go program failed for {folder_name}:\n{e.stderr}")

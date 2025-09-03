@@ -85,21 +85,21 @@ def run_water_per_block_with_policy(leaked_plaintext_size, policy_penalty, phase
 
 
 def main():
-    leaked_plaintext_sizes = ["3"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
+    leaked_plaintext_sizes = ["6", "12"]  # Where 12 refers to half a day's worth of utility readings exposed to the attacker
     policy_penalties = ["500", "600"]
     phase_type = "training"
 
     for leaked_plaintext_size in leaked_plaintext_sizes:
         # run_electricity_per_household(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
-        # run_water_per_household(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
+        run_water_per_household(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
         #
         # run_electricity_per_block(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
         # run_water_per_block(leaked_plaintext_size=leaked_plaintext_size, phase_type=phase_type)
 
-        for policy_penalty in policy_penalties:
-            print(f"Running with leaked plaintext size: {leaked_plaintext_size} and policy penalty: {policy_penalty}\n")
-            # run_electricity_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
-            run_water_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
+        # for policy_penalty in policy_penalties:
+        #     print(f"Running with leaked plaintext size: {leaked_plaintext_size} and policy penalty: {policy_penalty}\n")
+        #     # run_electricity_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
+        #     #run_water_per_block_with_policy(leaked_plaintext_size=leaked_plaintext_size, policy_penalty=policy_penalty, phase_type="training")
 
 
 if __name__ == "__main__":

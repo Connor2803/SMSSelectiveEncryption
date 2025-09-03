@@ -1,4 +1,4 @@
-# python ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py 12
+# python ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py <leaked plaintext size> <phase type>
 import os
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -124,12 +124,12 @@ class EncryptionSelectorEnv(gym.Env):
             raise ValueError("dataset_type must be train, validation, or test")
 
         # Remove duplicate entries in ML metrics CSV file for Water dataset.
-        df = df.drop_duplicates(subset=["filename", "section"])
+        df = df.drop_duplicates(subset=["filename", "block"])
 
-        max_household_water_usage_summation = df.groupby("filename")["section_sum_usage"].sum().max()
-        min_household_water_usage_summation = df.groupby("filename")["section_sum_usage"].sum().min()
-        max_household_raw_entropy = df.groupby("filename")["section_raw_entropy"].sum().max()
-        min_household_raw_entropy = df.groupby("filename")["section_raw_entropy"].sum().min()
+        max_household_water_usage_summation = df.groupby("filename")["block_sum_usage"].sum().max()
+        min_household_water_usage_summation = df.groupby("filename")["block_sum_usage"].sum().min()
+        max_household_raw_entropy = df.groupby("filename")["block_raw_entropy"].sum().max()
+        min_household_raw_entropy = df.groupby("filename")["block_raw_entropy"].sum().min()
 
         self._max_household_water_usage_summation = max_household_water_usage_summation
         self._min_household_water_usage_summation = min_household_water_usage_summation
@@ -138,13 +138,13 @@ class EncryptionSelectorEnv(gym.Env):
 
         # Observations are dictionaries that describe the current state of the environment the agent.
         self.observation_space = gym.spaces.Dict({
-            # Represents the range of summed household water utility usage values across all sections.
-            # I.e., sum(section_sum_usage) for a household.
+            # Represents the range of summed household water utility usage values across all blocks.
+            # I.e., sum(block_sum_usage) for a household.
             "household_water_usage_summation": gym.spaces.Box(low=self._min_household_water_usage_summation,
                                                               high=self._max_household_water_usage_summation,
                                                               shape=(1,), dtype=np.float64),
-            # Represents the entropy of the raw household water utility entropy values across all sections.
-            # I.e., sum(section_raw_entropy) for a household.
+            # Represents the entropy of the raw household water utility entropy values across all blocks.
+            # I.e., sum(block_raw_entropy) for a household.
             "household_raw_entropy": gym.spaces.Box(low=self._min_household_raw_entropy,
                                                     high=self._max_household_raw_entropy, shape=(1,), dtype=np.float64),
         })
@@ -157,7 +157,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         remaining_entropy_scaler = preprocessing.MinMaxScaler()
         self._remaining_entropy_scalar = remaining_entropy_scaler.fit(
-            self._df.groupby("filename")["section_remaining_entropy"].sum().to_frame())
+            self._df.groupby("filename")["block_remaining_entropy"].sum().to_frame())
 
         memory_scaler = preprocessing.MinMaxScaler()
         self._memory_scalar = memory_scaler.fit(self._df[["allocated_memory_MiB"]])
@@ -197,9 +197,9 @@ class EncryptionSelectorEnv(gym.Env):
             }
 
         household_data = self._df[self._df["filename"] == self._current_household_ID]
-        unique_sections_data = household_data.drop_duplicates(subset=["section"])
-        sum_usage_for_current_household = unique_sections_data["section_sum_usage"].sum()
-        sum_raw_entropy_for_current_household = unique_sections_data["section_raw_entropy"].sum()
+        unique_blocks_data = household_data.drop_duplicates(subset=["block"])
+        sum_usage_for_current_household = unique_blocks_data["block_sum_usage"].sum()
+        sum_raw_entropy_for_current_household = unique_blocks_data["block_raw_entropy"].sum()
 
         return {
             "household_water_usage_summation": np.array([sum_usage_for_current_household], dtype=np.float64),
@@ -226,7 +226,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         current_reidentification_attack_duration = metrics_row["reidentification_attack_duration"].mean() 
         current_reidentification_mean = metrics_row["reidentification_mean"].mean()
-        current_remaining_entropy = metrics_row["section_remaining_entropy"].sum()
+        current_remaining_entropy = metrics_row["block_remaining_entropy"].sum()
         current_memory = metrics_row["allocated_memory_MiB"].mean()
 
         current_summation_error = party_row["summation_error"].iloc[0]
@@ -244,7 +244,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._reidentification_mean_scalar.transform(pd.DataFrame([[current_reidentification_mean]], columns=["reidentification_mean"]))[0][0]
         scaled_current_remaining_entropy = \
             self._remaining_entropy_scalar.transform(
-                pd.DataFrame([[current_remaining_entropy]], columns=["section_remaining_entropy"]))[0][0]
+                pd.DataFrame([[current_remaining_entropy]], columns=["block_remaining_entropy"]))[0][0]
         scaled_current_memory = \
         self._memory_scalar.transform(pd.DataFrame([[current_memory]], columns=["allocated_memory_MiB"]))[0][0]
 
@@ -390,7 +390,7 @@ class CustomCallback(BaseCallback):
                     household_id,
                     total_reward,
 
-                    # Calculated from section-level statistics.
+                    # Calculated from block-level statistics.
                     selected_encryption_ratio,
                     scaled_reidentification_attack_duration,
                     scaled_reidentification_mean,
@@ -570,23 +570,23 @@ def main():
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
+    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+    try:
+        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
+        subprocess.run(run_args,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=3600  # 1 hour
+                        )
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to run Go program: {e}")
+        print(f"Stderr: {e.stderr}")
+        return
+
 
     print(f"\nUser chosen phase type: {user_chosen_phase_type}")
     if user_chosen_phase_type == "training":
-        print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
-        try:
-            run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
-            subprocess.run(run_args,
-                           check=True,
-                           capture_output=True,
-                           text=True,
-                           timeout=3600  # 1 hour
-                           )
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to run Go program: {e}")
-            print(f"Stderr: {e.stderr}")
-            return
-
         print("\nStarting training phase...")
         start_training_time = time.time()
         call_training_phase(current_leaked_plaintext_size)
