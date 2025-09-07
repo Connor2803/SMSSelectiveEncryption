@@ -282,6 +282,15 @@ func loadRealElectricityData(fileList []string) [][]float64 {
 
 // Approach 1: Sliding Window Breaking
 func applyWindowBasedBreaking(data [][]float64, tolerance float64) [][]float64 {
+	if tolerance == 0.0 {
+		// Should return exact copy with NO changes
+		result := make([][]float64, len(data))
+		for i := range data {
+			result[i] = make([]float64, len(data[i]))
+			copy(result[i], data[i])
+		}
+		return result
+	}
 	brokenData := make([][]float64, len(data))
 
 	for h := 0; h < len(data); h++ {
@@ -314,6 +323,15 @@ func applyWindowBasedBreaking(data [][]float64, tolerance float64) [][]float64 {
 
 // Approach 2: Adaptive Pattern Breaking
 func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float64 {
+	if tolerance == 0.0 {
+		// Should return exact copy with NO changes
+		result := make([][]float64, len(data))
+		for i := range data {
+			result[i] = make([]float64, len(data[i]))
+			copy(result[i], data[i])
+		}
+		return result
+	}
 	brokenData := make([][]float64, len(data))
 
 	for h := 0; h < len(data); h++ {
@@ -395,12 +413,13 @@ func calculatePatternUniqueness(pattern []float64, fullData []float64) float64 {
 }
 
 func breakUniqueSequence(window []float64, originalTotal, tolerance float64) {
-	if len(window) < 2 {
+	if len(window) < 2 || tolerance <= 0.0 {
 		return
 	}
 
 	maxVariance := originalTotal * tolerance
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed(time.Now().UnixNano())
+	rand.Seed(int64(originalTotal * 1000))
 
 	// Create redistribution amounts
 	redistributions := make([]float64, len(window))

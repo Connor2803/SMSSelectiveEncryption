@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ var (
 	flagLoops     = flag.Int("loops", 200, "attack loops for ASR estimate")
 	flagATD       = flag.Int("atd", 24, "attacker leaked block size (samples)")
 	flagShowDebug = flag.Bool("debug", true, "print encryption coverage/debug info")
+	flagCSVOut    = flag.String("csv", "test_results.csv", "output CSV file")
 )
 
 func main() {
@@ -59,6 +61,15 @@ func main() {
 	}
 	original := loadMatrix(fileList) // [][]float64
 
+	// Prepare CSV output
+	csvFile, err := os.Create(*flagCSVOut)
+	check(err)
+	defer csvFile.Close()
+
+	// Write CSV header
+	_, err = csvFile.WriteString("approach,tolerance,ratio,asr,time\n")
+	check(err)
+
 	// Iterate all combinations
 	fmt.Printf("Combinations: %d tolerances × %d ratios, loops=%d, atdSize=%d, approach=%s\n",
 		len(tolVals), len(ratioVals), *flagLoops, *flagATD, *flagApproach)
@@ -66,10 +77,20 @@ func main() {
 	for _, tol := range tolVals {
 		for _, ratio := range ratioVals {
 			asr, took := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagShowDebug)
+
+			// Console output
 			fmt.Printf("Result: approach=%s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d, time=%s)\n",
 				*flagApproach, tol, ratio, asr, *flagLoops, took)
+
+			// CSV output
+			csvLine := fmt.Sprintf("%s,%.2f,%d,%.4f,%s\n",
+				*flagApproach, tol, ratio, asr, took)
+			_, err = csvFile.WriteString(csvLine)
+			check(err)
 		}
 	}
+
+	fmt.Printf("Results saved to %s\n", *flagCSVOut)
 }
 
 // Run a single (tol, ratio) combo end-to-end and return ASR
@@ -252,17 +273,24 @@ func runGreedyUniqSelectionAndEncrypt(P []*party) {
 
 // Simple average ASR over N loops using the existing attacker
 func runAttackAverage(P []*party, loops int) float64 {
-	if loops < 1 {
-		loops = 1
+	if loops < 10 {
+		loops = 10 // Minimum for stability
 	}
-	success, cnt := 0, 0
-	start := time.Now()
+
+	results := make([]float64, loops)
 	for i := 0; i < loops; i++ {
-		success += attackParties(P) // returns 0/1
-		cnt++
+		// Reset attack state if needed
+		//resetAttackState() // You might need this function
+
+		results[i] = float64(attackParties(P))
 	}
-	elapsedTime += time.Since(start)
-	return float64(success) / float64(cnt)
+
+	// Use median instead of mean for more stability
+	sort.Float64s(results)
+	if loops%2 == 0 {
+		return (results[loops/2-1] + results[loops/2]) / 2.0
+	}
+	return results[loops/2]
 }
 
 // Window coverage stats (for debug)
