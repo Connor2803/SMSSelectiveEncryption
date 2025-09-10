@@ -245,7 +245,7 @@ func runGreedyUniqSelectionAndEncrypt(P []*party) {
 		}
 	}
 
-	// Fallback random marking if needed
+	// Fallback random marking in case
 	if markedNumbers < thresholdNumber {
 		type pos struct{ pi, si, idx int }
 		var pool []pos
@@ -271,26 +271,18 @@ func runGreedyUniqSelectionAndEncrypt(P []*party) {
 	elapsedTime += time.Since(startTime)
 }
 
-// Simple average ASR over N loops using the existing attacker
 func runAttackAverage(P []*party, loops int) float64 {
 	if loops < 10 {
-		loops = 10 // Minimum for stability
+		loops = 10
 	}
 
-	results := make([]float64, loops)
+	successCount := 0
 	for i := 0; i < loops; i++ {
-		// Reset attack state if needed
-		//resetAttackState() // You might need this function
-
-		results[i] = float64(attackParties(P))
+		successCount += attackParties(P) // returns 0 or 1
 	}
 
-	// Use median instead of mean for more stability
-	sort.Float64s(results)
-	if loops%2 == 0 {
-		return (results[loops/2-1] + results[loops/2]) / 2.0
-	}
-	return results[loops/2]
+	// Return success rate as proportion
+	return float64(successCount) / float64(loops)
 }
 
 // Window coverage stats (for debug)
@@ -357,7 +349,7 @@ func parseIntList(s string) ([]int, error) {
 	return out, nil
 }
 
-// Optional helper if you later sort selections by score
+// Optional helper if we later sort selections by score
 type byScore []struct {
 	i int
 	v float64
@@ -367,6 +359,6 @@ func (a byScore) Len() int           { return len(a) }
 func (a byScore) Less(i, j int) bool { return a[i].v > a[j].v }
 func (a byScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
-// Silence unused import if you trim anything.
+// Silence unused imports
 var _ = math.Abs
 var _ = sort.Float64s
