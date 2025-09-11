@@ -146,6 +146,23 @@ func calculateStandardDeviation(numbers []float64) (float64, float64) {
 	return standardDeviation, mean
 }
 
+func copyMatrix(matrix [][]float64) [][]float64 {
+	result := make([][]float64, len(matrix))
+	for i := range matrix {
+		result[i] = make([]float64, len(matrix[i]))
+		copy(result[i], matrix[i])
+	}
+	return result
+}
+
+func sum(slice []float64) float64 {
+	total := 0.0
+	for _, v := range slice {
+		total += v
+	}
+	return total
+}
+
 // Dataset loading functions
 func getFileList(datasetType string) []string {
 	wd, err := os.Getwd()

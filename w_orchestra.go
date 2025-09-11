@@ -98,15 +98,17 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	comboStart := time.Now()
 	// 2) Series breaking from original each time (no carry-over)
 	var broken [][]float64
-	switch strings.ToLower(approach) {
-	case "sliding":
-		broken = applyWindowBasedBreaking(original, tol)
-	case "adaptive":
-		broken = applyAdaptivePatternBreaking(original, tol)
-	case "none":
-		broken = original
-	default:
-		panic("approach must be sliding|adaptive")
+	if tol == 0.0 || strings.ToLower(approach) == "none" {
+		broken = original // Don't even call the breaking functions
+	} else {
+		switch strings.ToLower(approach) {
+		case "sliding":
+			broken = applyWindowBasedBreaking(original, tol)
+		case "adaptive":
+			broken = applyAdaptivePatternBreaking(original, tol)
+		default:
+			panic("approach must be sliding|adaptive|none")
+		}
 	}
 
 	// 3) Build parties and generate inputs from the BROKEN data

@@ -282,80 +282,154 @@ func loadRealElectricityData(fileList []string) [][]float64 {
 
 // Approach 1: Sliding Window Breaking
 func applyWindowBasedBreaking(data [][]float64, tolerance float64) [][]float64 {
-	if tolerance == 0.0 {
-		// Should return exact copy with NO changes
-		result := make([][]float64, len(data))
-		for i := range data {
-			result[i] = make([]float64, len(data[i]))
-			copy(result[i], data[i])
-		}
-		return result
+	if tolerance <= 0 {
+		return copyMatrix(data)
 	}
-	brokenData := make([][]float64, len(data))
+
+	result := copyMatrix(data)
 
 	for h := 0; h < len(data); h++ {
-		household := make([]float64, len(data[h]))
-		copy(household, data[h])
-
-		windowSize := 4 // Break patterns in 4-hour windows
-
-		for i := 0; i <= len(household)-windowSize; i += windowSize {
-			end := i + windowSize
-			if end > len(household) {
-				end = len(household)
-			}
-
-			// Calculate window total
-			windowTotal := 0.0
-			for j := i; j < end; j++ {
-				windowTotal += household[j]
-			}
-
-			// Break unique sequences while maintaining total
-			breakUniqueSequence(household[i:end], windowTotal, tolerance)
-		}
-
-		brokenData[h] = household
+		// Apply sliding window with randomized redistribution
+		applyRandomizedSlidingBreaking(result[h], tolerance)
 	}
 
-	return brokenData
+	return result
+}
+
+func redistributeRandomly(window []float64, budget float64) {
+	if budget <= 0 || len(window) < 2 {
+		return
+	}
+
+	// Create random redistribution pattern
+	changes := make([]float64, len(window))
+	totalChange := 0.0
+
+	// Generate random changes that sum to zero
+	for i := 0; i < len(window)-1; i++ {
+		maxChange := math.Min(budget/2, window[i]*0.2)
+		change := (float64(getRandom(2000)) - 1000.0) / 1000.0 * maxChange // -maxChange to +maxChange
+		changes[i] = change
+		totalChange += change
+	}
+	changes[len(window)-1] = -totalChange // Balance the changes
+
+	// Apply changes
+	for i, change := range changes {
+		window[i] += change
+	}
+}
+
+func applyRandomizedSlidingBreaking(data []float64, tolerance float64) {
+	totalSum := sum(data)
+	budget := totalSum * tolerance
+	windowSize := 4 // Or dynamic based on data size
+
+	for i := 0; i <= len(data)-windowSize && budget > 0; i++ {
+		window := data[i : i+windowSize]
+		windowSum := sum(window)
+		windowBudget := math.Min(budget, windowSum*tolerance)
+
+		// Randomized redistribution to avoid regular patterns
+		redistributeRandomly(window, windowBudget)
+		budget -= windowBudget
+	}
 }
 
 // Approach 2: Adaptive Pattern Breaking
 func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float64 {
-	if tolerance == 0.0 {
-		// Should return exact copy with NO changes
-		result := make([][]float64, len(data))
-		for i := range data {
-			result[i] = make([]float64, len(data[i]))
-			copy(result[i], data[i])
-		}
-		return result
+	if tolerance <= 0 {
+		return copyMatrix(data)
 	}
-	brokenData := make([][]float64, len(data))
+
+	result := copyMatrix(data)
+
+	// Make breaking MORE aggressive - scale tolerance up
+	effectiveTolerance := tolerance * 2.0 // Double the aggressiveness
 
 	for h := 0; h < len(data); h++ {
-		household := make([]float64, len(data[h]))
-		copy(household, data[h])
+		// Apply more disruptive breaking
+		applyAggressiveBreaking(result[h], effectiveTolerance)
+	}
+	return result
+}
 
-		// Identify unique patterns and break them
-		uniquePatterns := identifyUniquePatterns(household)
-
-		for _, pattern := range uniquePatterns {
-			// Calculate total for this pattern
-			patternTotal := 0.0
-			for j := pattern.start; j <= pattern.end; j++ {
-				patternTotal += household[j]
-			}
-
-			// Apply adaptive breaking based on pattern characteristics
-			applyAdaptiveBreaking(household[pattern.start:pattern.end+1], patternTotal, tolerance, pattern.uniqueness)
-		}
-
-		brokenData[h] = household
+func applyAggressiveBreaking(data []float64, tolerance float64) {
+	if len(data) < 2 {
+		return
 	}
 
-	return brokenData
+	totalSum := sum(data)
+	budget := totalSum * tolerance
+
+	// More aggressive redistribution
+	for i := 0; i < len(data)-1; i += 2 {
+		if budget <= 0 {
+			break
+		}
+
+		// Larger changes
+		maxChange := math.Min(budget/2, data[i]*tolerance) // Use tolerance directly
+		change := (float64(getRandom(2000)) - 1000.0) / 1000.0 * maxChange
+
+		data[i] += change
+		data[i+1] -= change
+		budget -= math.Abs(2 * change)
+	}
+}
+
+func applyUniformBreaking(data []float64, tolerance float64) {
+	if len(data) < 2 {
+		return
+	}
+
+	totalSum := sum(data)
+	budget := totalSum * tolerance
+
+	// For uniform data, create deliberate variations
+	for i := 0; i < len(data)-1; i += 2 {
+		if budget <= 0 {
+			break
+		}
+
+		// Create alternating pattern to break uniformity
+		change := math.Min(budget/4, data[i]*0.1)
+		if i%4 == 0 {
+			data[i] += change
+			data[i+1] -= change
+		} else {
+			data[i] -= change
+			data[i+1] += change
+		}
+		budget -= 2 * change
+	}
+}
+
+func applyAdaptiveLogic(data []float64, tolerance float64) {
+	if len(data) < 2 {
+		return
+	}
+	// Identify unique patterns
+	patterns := identifyUniquePatterns(data)
+	for _, pattern := range patterns {
+		originalTotal := 0.0
+		for i := pattern.start; i <= pattern.end; i++ {
+			originalTotal += data[i]
+		}
+		applyAdaptiveBreaking(data[pattern.start:pattern.end+1], originalTotal, tolerance, pattern.uniqueness)
+	}
+}
+
+func calculateVariance(data []float64) float64 {
+	if len(data) == 0 {
+		return 0.0
+	}
+	mean := sum(data) / float64(len(data))
+	variance := 0.0
+	for _, v := range data {
+		variance += (v - mean) * (v - mean)
+	}
+	return variance / float64(len(data))
 }
 
 type UniquePattern struct {
