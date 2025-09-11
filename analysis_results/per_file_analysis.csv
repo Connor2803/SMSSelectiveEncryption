@@ -1,0 +1,4 @@
+filename,method,tolerance,avg_improvement_pct,improvement_std,max_improvement,min_improvement,performance_class,data_points,consistent
+sliding.csv,sliding,0.0,-1.514614816479391,5.025016024833847,7.9872204472843435,-10.828025477707007,Neutral,100,False
+adaptive.csv,adaptive,0.0,-0.34718099048250994,5.94046420503069,7.9872204472843435,-13.73737373737374,Neutral,100,False
+adaptive_test_results.csv,adaptive,0.0,-0.35480095382776466,5.461143398795639,10.862619808306711,-11.783439490445861,Neutral,100,False

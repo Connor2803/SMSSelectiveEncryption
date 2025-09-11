@@ -117,6 +117,16 @@ func getRandom(numberRange int) int {
 	return rand.Intn(numberRange)
 }
 
+var globalAttackerTimeDelta int = 24
+
+func getAttackerTimeDelta() int {
+	return globalAttackerTimeDelta
+}
+
+func setAttackerTimeDelta(atd int) {
+	globalAttackerTimeDelta = atd
+}
+
 func calculateStandardDeviation(numbers []float64) (float64, float64) {
 	var sum float64
 	for _, num := range numbers {

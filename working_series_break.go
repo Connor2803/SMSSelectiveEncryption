@@ -556,23 +556,22 @@ func runEncryptionTest(params ckks.Parameters, data [][]float64, dataset string)
 
 func generateInputsFromData(P []*party, data [][]float64) {
 	if len(data) == 0 || len(data[0]) == 0 {
-		//fmt.println("    Error: No data to process")
 		return
 	}
 
+	// Use the actual data size, not MAX_PARTY_ROWS
 	globalPartyRows = len(data[0])
 	sectionNum = globalPartyRows / sectionSize
 	if globalPartyRows%sectionSize != 0 {
 		sectionNum++
 	}
 
-	//fmt.printf("    Initializing %d parties with %d rows, %d sections\n", len(P), globalPartyRows, sectionNum)
-
 	for pi, po := range P {
 		if pi >= len(data) {
 			break
 		}
 
+		// Initialize with actual data size
 		po.rawInput = make([]float64, globalPartyRows)
 		po.encryptedInput = make([]float64, globalPartyRows)
 		po.flag = make([]int, sectionNum)
@@ -588,7 +587,7 @@ func generateInputsFromData(P []*party, data [][]float64) {
 			po.greedyFlags[i] = make([]int, sectionSize)
 		}
 
-		// Copy data
+		// Copy actual data (not more than available)
 		for i := 0; i < globalPartyRows && i < len(data[pi]); i++ {
 			po.rawInput[i] = data[pi][i]
 			if i < sectionNum*sectionSize {
@@ -596,18 +595,17 @@ func generateInputsFromData(P []*party, data [][]float64) {
 			}
 		}
 
-		// Calculate entropy and transitions (simplified)
+		// Calculate entropy and transitions
 		for i := 0; i < globalPartyRows; i++ {
 			sectionIndex := i / sectionSize
 			if sectionIndex < sectionNum {
-				po.entropy[sectionIndex] += math.Abs(po.rawInput[i]) * 0.1 // Simplified entropy
+				po.entropy[sectionIndex] += math.Abs(po.rawInput[i]) * 0.1
 				if i > 0 && !almostEqual(po.rawInput[i], po.rawInput[i-1]) {
 					po.transition[sectionIndex] += 1
 				}
 			}
 		}
 	}
-	//fmt.printf("    Data initialization completed\n")
 }
 
 func processGreedyEncryptionSimulation(P []*party) {
