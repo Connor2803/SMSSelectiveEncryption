@@ -52,7 +52,7 @@ print(f"\nGo source path: {GO_SOURCE_PATH}")
 
 
 class EncryptionSelectorEnv(gym.Env):
-    def __init__(self, dataset_type="train"):
+    def __init__(self, dataset_type):
         super().__init__()
 
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -109,24 +109,24 @@ class EncryptionSelectorEnv(gym.Env):
         self._testing_households = permanent_testing_IDs
 
         self._active_households = None  # This will store the list of households for the current phase.
-        self.dataset_type = dataset_type
+        self._dataset_type = dataset_type
 
-        if dataset_type == "train":
+        if self._dataset_type == "train":
             self._active_households = self._training_households
-        elif dataset_type == "validation":
+        elif self._dataset_type == "validation":
             self._active_households = self._validation_households
-        elif dataset_type == "test":
+        elif self._dataset_type == "test":
             self._active_households = self._testing_households
         else:
-            raise ValueError("dataset_type must be train, validation, or test")
+            raise ValueError("dataset_type must be train, validation, test")
 
         # Remove duplicate entries in ML metrics CSV file for Electricity dataset.
-        df = df.drop_duplicates(subset=["filename", "section"])
+        df = df.drop_duplicates(subset=["filename", "block"])
 
-        max_household_electricity_usage_summation = df.groupby("filename")["section_sum_usage"].sum().max()
-        min_household_electricity_usage_summation = df.groupby("filename")["section_sum_usage"].sum().min()
-        max_household_raw_entropy = df.groupby("filename")["section_raw_entropy"].sum().max()
-        min_household_raw_entropy = df.groupby("filename")["section_raw_entropy"].sum().min()
+        max_household_electricity_usage_summation = df.groupby("filename")["block_sum_usage"].sum().max()
+        min_household_electricity_usage_summation = df.groupby("filename")["block_sum_usage"].sum().min()
+        max_household_raw_entropy = df.groupby("filename")["block_raw_entropy"].sum().max()
+        min_household_raw_entropy = df.groupby("filename")["block_raw_entropy"].sum().min()
 
         self._max_household_electricity_usage_summation = max_household_electricity_usage_summation
         self._min_household_electricity_usage_summation = min_household_electricity_usage_summation
@@ -135,13 +135,13 @@ class EncryptionSelectorEnv(gym.Env):
 
         # Observations are dictionaries that describe the current state of the environment the agent.
         self.observation_space = gym.spaces.Dict({
-            # Represents the range of summed household electricity utility usage values across all sections.
-            # I.e., sum(section_sum_usage) for a household.
+            # Represents the range of summed household electricity utility usage values across all blocks.
+            # I.e., sum(block_sum_usage) for a household.
             "household_electricity_usage_summation": gym.spaces.Box(low=self._min_household_electricity_usage_summation,
                                                               high=self._max_household_electricity_usage_summation,
                                                               shape=(1,), dtype=np.float64),
-            # Represents the entropy of the raw household electricity utility entropy values across all sections.
-            # I.e., sum(section_raw_entropy) for a household.
+            # Represents the entropy of the raw household electricity utility entropy values across all blocks.
+            # I.e., sum(block_raw_entropy) for a household.
             "household_raw_entropy": gym.spaces.Box(low=self._min_household_raw_entropy,
                                                     high=self._max_household_raw_entropy, shape=(1,), dtype=np.float64),
         })
@@ -154,7 +154,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         remaining_entropy_scaler = preprocessing.MinMaxScaler()
         self._remaining_entropy_scalar = remaining_entropy_scaler.fit(
-            self._df.groupby("filename")["section_remaining_entropy"].sum().to_frame())
+            self._df.groupby("filename")["block_remaining_entropy"].sum().to_frame())
 
         memory_scaler = preprocessing.MinMaxScaler()
         self._memory_scalar = memory_scaler.fit(self._df[["allocated_memory_MiB"]])
@@ -194,9 +194,9 @@ class EncryptionSelectorEnv(gym.Env):
             }
 
         household_data = self._df[self._df["filename"] == self._current_household_ID]
-        unique_sections_data = household_data.drop_duplicates(subset=["section"])
-        sum_usage_for_current_household = unique_sections_data["section_sum_usage"].sum()
-        sum_raw_entropy_for_current_household = unique_sections_data["section_raw_entropy"].sum()
+        unique_blocks_data = household_data.drop_duplicates(subset=["block"])
+        sum_usage_for_current_household = unique_blocks_data["block_sum_usage"].sum()
+        sum_raw_entropy_for_current_household = unique_blocks_data["block_raw_entropy"].sum()
 
         return {
             "household_electricity_usage_summation": np.array([sum_usage_for_current_household], dtype=np.float64),
@@ -223,7 +223,7 @@ class EncryptionSelectorEnv(gym.Env):
 
         current_reidentification_attack_duration = metrics_row["reidentification_attack_duration"].mean() 
         current_reidentification_mean = metrics_row["reidentification_mean"].mean()
-        current_remaining_entropy = metrics_row["section_remaining_entropy"].sum()
+        current_remaining_entropy = metrics_row["block_remaining_entropy"].sum()
         current_memory = metrics_row["allocated_memory_MiB"].mean()
 
         current_summation_error = party_row["summation_error"].iloc[0]
@@ -241,7 +241,7 @@ class EncryptionSelectorEnv(gym.Env):
         self._reidentification_mean_scalar.transform(pd.DataFrame([[current_reidentification_mean]], columns=["reidentification_mean"]))[0][0]
         scaled_current_remaining_entropy = \
             self._remaining_entropy_scalar.transform(
-                pd.DataFrame([[current_remaining_entropy]], columns=["section_remaining_entropy"]))[0][0]
+                pd.DataFrame([[current_remaining_entropy]], columns=["block_remaining_entropy"]))[0][0]
         scaled_current_memory = \
         self._memory_scalar.transform(pd.DataFrame([[current_memory]], columns=["allocated_memory_MiB"]))[0][0]
 
@@ -304,7 +304,7 @@ class EncryptionSelectorEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        if self.dataset_type == "train":
+        if self._dataset_type == "train":
             self._current_household_ID = random.choice(self._active_households)
         elif self._current_household_ID is None:
             self._current_household_ID = self._active_households[0]
@@ -387,7 +387,7 @@ class CustomCallback(BaseCallback):
                     household_id,
                     total_reward,
 
-                    # Calculated from section-level statistics.
+                    # Calculated from block-level statistics.
                     selected_encryption_ratio,
                     scaled_reidentification_attack_duration,
                     scaled_reidentification_mean,
@@ -551,42 +551,116 @@ def call_testing_phase(current_leaked_plaintext_size):
 
             log_to_csv(writer, i + 1, household_id, reward, info_step)
 
+def call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio):
+    model = DQN.load(
+        f"./ELECTRICITY_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Selector_{current_leaked_plaintext_size}.zip")
+    env_test = EncryptionSelectorEnv(dataset_type="test")
+    testing_households = env_test._active_households.copy()
+
+    household_decisions = {}
+
+    print("Determining ideal encryption ratio for each household...")
+    for household_id in testing_households:
+        obs = env_test._set_household(household_id)
+        
+        rewards_for_ratios = []
+        for action_idx, ratio in enumerate(env_test._encryption_ratios):
+            # Temporarily step the environment to get the reward for this action
+            _obs, reward, _terminated, _truncated, _info = env_test.step(action_idx)
+            rewards_for_ratios.append(reward)
+
+        best_action_idx = np.argmax(rewards_for_ratios)
+        household_decisions[household_id] = {
+            "current_action_idx": best_action_idx,
+            "rewards_per_action": rewards_for_ratios
+        }
+
+    initial_ratios = [env_test._encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+    current_avg_ratio = np.mean(initial_ratios)
+    print(f"Initial average ratio from optimal choices: {current_avg_ratio:.4f}")
+
+    while current_avg_ratio > np.float64(float(target_avg_ratio)):
+        best_household_to_downgrade = None
+        min_reward_loss = float('inf')
+
+        for household_id, data in household_decisions.items():
+            current_idx = data["current_action_idx"]
+
+            if current_idx == 0:
+                continue
+
+            reward_at_current_ratio = data["rewards_per_action"][current_idx]
+            reward_at_lower_ratio = data["rewards_per_action"][current_idx - 1]
+            reward_loss = reward_at_current_ratio - reward_at_lower_ratio
+
+            if reward_loss < min_reward_loss:
+                min_reward_loss = reward_loss
+                best_household_to_downgrade = household_id
+        
+        if best_household_to_downgrade is None:
+            print("Cannot downgrade further. All households are at the minimum ratio.")
+            break
+
+        household_decisions[best_household_to_downgrade]["current_action_idx"] -= 1
+
+        new_ratios = [env_test._encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+        current_avg_ratio = np.mean(new_ratios)
+        print(f"Downgraded household {best_household_to_downgrade}. New avg ratio: {current_avg_ratio:.4f}")
+
+    print("\nFinal decisions made. Writing to log...")
+    with open(
+            f"./ELECTRICITY_household_level_encryption_ratio_selector/testing_log_{current_leaked_plaintext_size}_{target_avg_ratio}_fixed_encryption_ratio.csv",
+            "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(log_headers)
+
+        for i, household_id in enumerate(testing_households):
+            final_action = household_decisions[household_id]["current_action_idx"]
+            
+            env_test._set_household(household_id)
+            _obs, reward, _terminated, _truncated, info_step = env_test.step(final_action)
+            
+            log_to_csv(writer, i + 1, household_id, reward, info_step)
+
+    print("Fixed encryption ratio testing phase completed.")
+
 def main():
-    if len(sys.argv) != 3:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and phase type as arguments.")
-        current_leaked_plaintext_size = "12"
-        user_chosen_phase_type = "training"
+    if len(sys.argv) != 4:
+        print("WARNING: Not enough arguments provided!")
+        sys.exit(1) 
+
     else:
         current_leaked_plaintext_size = sys.argv[1]
-        user_chosen_phase_type = sys.argv[2]
+        target_avg_ratio = sys.argv[2]
+        user_chosen_phase_type = sys.argv[3]
 
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
     
     try:
-            subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to compile Go program: {e}")
-            print(f"Stderr: {e.stderr}")
-            return
+        subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to compile Go program: {e}")
+        print(f"Stderr: {e.stderr}")
+        return
 
-        print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
+
+    if user_chosen_phase_type == "training":
+        print(f"Running Go metrics generator with leaked plaintext size = {current_leaked_plaintext_size}...")
         try:
             run_args = [GO_EXECUTABLE_PATH, "2", current_leaked_plaintext_size]
             subprocess.run(run_args,
-                           check=True,
-                           capture_output=True,
-                           text=True,
-                           timeout=3600  # 1 hour
-                           )
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=3600  # 1 hour
+                            )
         except subprocess.CalledProcessError as e:
             print(f"Failed to run Go program: {e}")
             print(f"Stderr: {e.stderr}")
             return
-
-
-    print(f"\nUser chosen phase type: {user_chosen_phase_type}")
-    if user_chosen_phase_type == "training":
+        
         print("\nStarting training phase...")
         start_training_time = time.time()
         call_training_phase(current_leaked_plaintext_size)
@@ -607,6 +681,12 @@ def main():
         call_testing_phase(current_leaked_plaintext_size)
         print("\nTesting phase completed.")
 
+    elif (user_chosen_phase_type == "fixed_encryption_ratio_test"):
+        print("\nStarting fixed encryption ratio testing phase...")
+        call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio)
+        print("\nFixed encryption ratio testing phase phase completed.")
+
+    sys.exit(0) 
 
 if __name__ == "__main__":
     main()

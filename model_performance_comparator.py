@@ -1,4 +1,5 @@
-# python ./model_performance_comparator.py <leaked_plaintext_size> <number_of_runs> <policy_penalty>
+# python ./model_performance_comparator.py <leaked_plaintext_size>
+# <number_of_runs> [policy_penalty] [target_average_ratio]
 
 import re
 import statistics
@@ -9,16 +10,17 @@ from collections import defaultdict
 import pandas as pd
 
 # The fixed 10 test households that will be compared across all RL models.
-electricity_test_households = ["MAC000248.csv",
-                               "MAC000252.csv",
-                               "MAC000253.csv",
-                               "MAC000255.csv",
-                               "MAC000256.csv",
-                               "MAC000258.csv",
-                               "MAC000271.csv",
-                               "MAC000272.csv",
-                               "MAC000274.csv",
-                               "MAC004539.csv"]
+electricity_test_households = ["MAC000221.csv",
+"MAC000222.csv",
+"MAC000226.csv",
+"MAC000230.csv",
+"MAC000238.csv",
+"MAC000239.csv",
+"MAC000243.csv",
+"MAC000244.csv",
+"MAC000245.csv",
+"MAC000246.csv"]
+
 
 water_test_households = ["e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv",
                          "e363b1f3-f503-48b4-b87c-98fe07632c02.csv",
@@ -93,17 +95,23 @@ def parse_block_level_log(log_df: pd.DataFrame, test_households: list) -> list:
 
 
 def run_single_test_and_get_results(leaked_plaintext_size: str, folder_name: str, model_name: str,
-                                    dataset: str, policy_penalty: str = None) -> list:
+                                    dataset: str, policy_penalty: str = None, target_average_ratio: str = None) -> list:
     """Executes one test run and calls the correct parser based on the model type."""
     command = ["python", f"./{folder_name}/{model_name}.py", leaked_plaintext_size]
     if policy_penalty:
         command.append(policy_penalty)
-
-    command.append("testing")
+    if target_average_ratio: 
+        command.append(target_average_ratio)
+        command.append("fixed_encryption_ratio_test")
+    else:
+        command.append("None")
+        command.append("testing")
 
     log_filename_suffix = f"{leaked_plaintext_size}"
     if policy_penalty:
         log_filename_suffix += f"_{policy_penalty}"
+    if target_average_ratio:
+        log_filename_suffix += f"_{target_average_ratio}_fixed_encryption_ratio"
     log_file = f"./{folder_name}/testing_log_{log_filename_suffix}.csv"
 
     try:
@@ -154,25 +162,14 @@ def run_analysis(all_runs_data: list):
 
     return analysis
 
-# def write_results_to_csv(analysis_dict, model_complexity, dataset, leaked_plaintext_size, policy_penalty: str = None):
-#     """Writes the final analysis dictionary to a CSV file."""
-#     df = pd.DataFrame.from_dict(analysis_dict, orient='index')
-#     if policy_penalty:
-#         output_filename = f"{dataset}_{model_complexity}_{leaked_plaintext_size}_{policy_penalty}_collated_results.csv"
-#     else:
-#         output_filename = f"{dataset}_{model_complexity}_{leaked_plaintext_size}_collated_results.csv"
-#     try:
-#         df.to_csv(output_filename)
-#         print(f"Successfully wrote aggregated results to {output_filename}")
-#     except Exception as e:
-#         print(f"ERROR: Could not write to file: {output_filename}. Reason: {e}")
-
 def write_results_to_csv(analysis_df: pd.DataFrame, model_complexity: str, dataset: str, leaked_plaintext_size: str,
-                         policy_penalty: str = None):
+                         policy_penalty: str = None, target_average_ratio: str = None):
     """Writes the final analysis DataFrame to a CSV file."""
     filename_suffix = leaked_plaintext_size
     if policy_penalty:
         filename_suffix += f"_{policy_penalty}"
+    if target_average_ratio: 
+        filename_suffix += f"_{target_average_ratio}"
 
     model_name_from_folder = model_complexity.split('/')[-1]
     output_filename = f"{dataset}_{model_name_from_folder}_{filename_suffix}_collated_results.csv"
@@ -184,74 +181,85 @@ def write_results_to_csv(analysis_df: pd.DataFrame, model_complexity: str, datas
         print(f"ERROR: Could not write to file: {output_filename}. Reason: {e}")
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python model_performance_comparator.py <leaked_plaintext_size> <number_of_runs> [policy_penalty]")
-        leaked_plaintext_size = "12"
-        number_of_runs = 10
+    # if len(sys.argv) < 3:
+    #     print("Usage: python model_performance_comparator.py <leaked_plaintext_size> <number_of_runs> [policy_penalty] [target average ratio]")
+    #     sys.exit(1)
 
-    else:
-        leaked_plaintext_size = sys.argv[1]
-        number_of_runs = int(sys.argv[2])
-        policy_penalty = sys.argv[3] if len(sys.argv) > 3 else None  # Policy penalty is optional
+    # else:
+    #     leaked_plaintext_size = sys.argv[1]
+    #     number_of_runs = int(sys.argv[2])
+    #     policy_penalty = sys.argv[3] if len(sys.argv) > 3 else None  # Policy penalty is optional
+    #     target_average_ratio = sys.argv[4] if len(sys.argv) > 4 else None
+
+    #     if policy_penalty == "None":
+    #         policy_penalty = None
+    #     if target_average_ratio == "None":
+    #         target_average_ratio = None
 
     folder_names = [
-        # "ELECTRICITY_household_level_encryption_ratio_selector",
-        "WATER_household_level_encryption_ratio_selector",
+        "ELECTRICITY_household_level_encryption_ratio_selector",
+        # "WATER_household_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector",
         # "WATER_block_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",
         # "WATER_block_level_encryption_ratio_selector_with_policy"
     ]
 
-    print(f"Starting comparison of {number_of_runs} test runs for leaked plaintext size of {leaked_plaintext_size}\n")
+    number_of_runs = 10
+    policy_penalty = None
+    leaked_plaintext_sizes = [3, 6, 9, 12, 24, 36, 48]
+    target_average_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
-    for folder_name in folder_names:
-        current_policy_penalty = None
-        if "with_policy" in folder_name:
-            if not policy_penalty:
-                print(f"WARNING: Skipping {folder_name} because policy_penalty is required but not provided.")
-                continue
-            current_policy_penalty = policy_penalty
+    for leaked_plaintext_size in leaked_plaintext_sizes:
+        for target_average_ratio in target_average_ratios:
+            print(f"Starting comparison of {number_of_runs} test runs for leaked plaintext size of {leaked_plaintext_size} and target average ratio of {target_average_ratio}\n")
 
-        model_name = "household_level_encryption_ratio_selector" if "household_level" in folder_name else \
-            "block_level_encryption_ratio_selector_with_policy" if "with_policy" in folder_name else \
-                "block_level_encryption_ratio_selector"
+            for folder_name in folder_names:
+                current_policy_penalty = None
+                if "with_policy" in folder_name:
+                    if not policy_penalty:
+                        print(f"WARNING: Skipping {folder_name} because policy_penalty is required but not provided.")
+                        continue
+                    current_policy_penalty = policy_penalty
 
-        dataset = folder_name.split("_")[0]
+                model_name = "household_level_encryption_ratio_selector" if "household_level" in folder_name else \
+                    "block_level_encryption_ratio_selector_with_policy" if "with_policy" in folder_name else \
+                        "block_level_encryption_ratio_selector"
 
-        if "household_level_encryption_ratio_selector" in folder_name:
-            print(f"\n\n\nGenerating metrics for {folder_name} using generate_household_level_metrics.go with leaked plaintext size:{leaked_plaintext_size}\n\n\n")
-            if dataset == "ELECTRICITY":
-                go_dataset = "2"
-            else:
-                go_dataset = "1"
-            try:
-                go_program_path = f"./{folder_name}/generate_household_level_metrics.go"
-                subprocess.run(["go", "run", go_program_path, go_dataset, leaked_plaintext_size, "testing"],
-                               check=True, capture_output=True, text=True)
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: The Go program failed for {folder_name}:\n{e.stderr}")
-                continue
+                dataset = folder_name.split("_")[0]
 
-        all_runs_data = []
+                if "household_level_encryption_ratio_selector" in folder_name:
+                    print(f"\n\n\nGenerating metrics for {folder_name} using generate_household_level_metrics.go with leaked plaintext size:{leaked_plaintext_size}\n\n\n")
+                    if dataset == "ELECTRICITY":
+                        go_dataset = "2"
+                    else:
+                        go_dataset = "1"
+                    try:
+                        go_program_path = f"./{folder_name}/generate_household_level_metrics.go"
+                        subprocess.run(["go", "run", go_program_path, go_dataset, str(leaked_plaintext_size)],
+                                    check=True, capture_output=True, text=True)
+                    except subprocess.CalledProcessError as e:
+                        print(f"ERROR: The Go program failed for {folder_name}:\n{e.stderr}")
+                        continue
 
-        print("*" * 100)
-        print(f"\nProcessing Model: {folder_name}")
-        for i in range(number_of_runs):
-            print(
-                f"Executing test run {i+1}/{number_of_runs} for {folder_name} (size: {leaked_plaintext_size}, policy: {policy_penalty or 'N/A'})")
-            single_run_results = run_single_test_and_get_results(
-                leaked_plaintext_size, folder_name, model_name, dataset, current_policy_penalty
-            )
-            if single_run_results:
-                all_runs_data.extend(single_run_results)
-            else:
-                print(f"  - Run {i + 1} failed. Skipping.")
+                all_runs_data = []
 
-        final_analysis = run_analysis(all_runs_data)
+                print("*" * 100)
+                print(f"\nProcessing Model: {folder_name}")
+                for i in range(number_of_runs):
+                    print(f"Executing test run {i+1}/{number_of_runs} for {folder_name} (size: {leaked_plaintext_size} policy: {policy_penalty or 'N/A'}, target_ratio: {target_average_ratio or 'N/A'})")
+                    single_run_results = run_single_test_and_get_results(
+                        str(leaked_plaintext_size), folder_name, model_name, dataset, current_policy_penalty, str(target_average_ratio)
+                    )
+                    if single_run_results:
+                        all_runs_data.extend(single_run_results)
+                    else:
+                        print(f"  - Run {i + 1} failed. Skipping.")
 
-        write_results_to_csv(final_analysis, model_name, dataset, leaked_plaintext_size, current_policy_penalty)
-        print("*" * 100)
+                final_analysis = run_analysis(all_runs_data)
+
+                write_results_to_csv(final_analysis, model_name, dataset, str(leaked_plaintext_size), current_policy_penalty, str(target_average_ratio))
+                print("*" * 100)
 
 
 if __name__ == "__main__":
