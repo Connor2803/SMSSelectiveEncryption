@@ -111,6 +111,22 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 		}
 	}
 
+	fuzzedData := broken // Keep reference to fuzzed data
+
+	if showDebug {
+		totalChanges := 0
+		for h := 0; h < len(original); h++ {
+			for i := 0; i < len(original[h]); i++ {
+				if math.Abs(original[h][i]-broken[h][i]) > 0.001 {
+					totalChanges++
+				}
+			}
+		}
+		fmt.Printf("DEBUG: Fuzzing changed %d values out of %d total (%.2f%%)\n",
+			totalChanges, len(original)*len(original[0]),
+			float64(totalChanges)/float64(len(original)*len(original[0]))*100)
+	}
+
 	// 3) Build parties and generate inputs from the BROKEN data
 	paramsDef := ckks.PN14QP438
 	params, err := ckks.NewParametersFromLiteral(paramsDef)
@@ -124,10 +140,17 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	runGreedyUniqSelectionAndEncrypt(P)
 
 	// Force the attacker to read the encrypted stream
-	for _, po := range P {
-		buf := make([]float64, len(po.encryptedInput))
-		copy(buf, po.encryptedInput)
-		po.rawInput = buf
+	for pi, po := range P {
+		po.attackVisibleData = make([]float64, len(po.encryptedInput))
+		for i := 0; i < len(po.encryptedInput); i++ {
+			if po.encryptedInput[i] == -0.1 {
+				po.attackVisibleData[i] = -0.1 // Encrypted
+			} else {
+				po.attackVisibleData[i] = fuzzedData[pi][i] // Fuzzed value
+			}
+		}
+		// Attacker sees the attack-visible data
+		po.rawInput = po.attackVisibleData
 	}
 
 	// Configure attacker globals

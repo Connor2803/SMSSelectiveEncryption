@@ -323,14 +323,14 @@ func redistributeRandomly(window []float64, budget float64) {
 func applyRandomizedSlidingBreaking(data []float64, tolerance float64) {
 	totalSum := sum(data)
 	budget := totalSum * tolerance
-	windowSize := 4 // Or dynamic based on data size
+	windowSize := 4
 
-	for i := 0; i <= len(data)-windowSize && budget > 0; i++ {
+	// Non-overlapping windows: step by windowSize
+	for i := 0; i+windowSize <= len(data) && budget > 0; i += windowSize {
 		window := data[i : i+windowSize]
 		windowSum := sum(window)
 		windowBudget := math.Min(budget, windowSum*tolerance)
 
-		// Randomized redistribution to avoid regular patterns
 		redistributeRandomly(window, windowBudget)
 		budget -= windowBudget
 	}
@@ -340,6 +340,9 @@ func applyRandomizedSlidingBreaking(data []float64, tolerance float64) {
 func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float64 {
 	if tolerance <= 0 {
 		return copyMatrix(data)
+	}
+	if tolerance > 0 {
+		fmt.Printf("FUZZING CALLED with tolerance %.2f\n", tolerance)
 	}
 
 	result := copyMatrix(data)
@@ -355,6 +358,64 @@ func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float
 }
 
 func applyAggressiveBreaking(data []float64, tolerance float64) {
+	if len(data) < 2 {
+		return
+	}
+
+	fmt.Printf("NUCLEAR: Processing %d values\n", len(data))
+
+	changes := 0
+
+	// PHASE 1: Force change EVERY value including zeros
+	for i := 0; i < len(data)-1; i += 2 {
+		// ULTRA-AGGRESSIVE: Always make a significant change to both values
+		changeAmount := 0.01 // 1% minimum change
+
+		if data[i] == 0.0 {
+			// Convert zero to small positive value
+			data[i] = changeAmount + (float64(getRandom(1000)) / 10000.0) // 0.01 to 0.11
+			changes++
+		} else {
+			// Change non-zero values by at least 1%
+			data[i] += changeAmount * (1.0 + float64(getRandom(100))/100.0) // 1-2% increase
+			changes++
+		}
+
+		if data[i+1] == 0.0 {
+			// Convert zero to small positive value
+			data[i+1] = changeAmount + (float64(getRandom(1000)) / 10000.0) // 0.01 to 0.11
+			changes++
+		} else {
+			// Change non-zero values by at least 1%
+			data[i+1] -= changeAmount * (1.0 + float64(getRandom(100))/100.0) // 1-2% decrease
+			if data[i+1] < 0.001 {
+				data[i+1] = 0.001 // Prevent negative
+			}
+			changes++
+		}
+	}
+
+	// PHASE 2: Apply tolerance-based changes to ALL consecutive pairs
+	for i := 0; i < len(data)-1; i++ {
+		if data[i] > 0.001 && data[i+1] > 0.001 {
+			smaller := math.Min(data[i], data[i+1])
+			change := smaller * tolerance
+
+			if i%2 == 0 {
+				data[i] -= change
+				data[i+1] += change
+			} else {
+				data[i] += change
+				data[i+1] -= change
+			}
+			changes++
+		}
+	}
+
+	fmt.Printf("NUCLEAR: Made %d changes (should be ~%d)\n", changes, len(data))
+}
+
+/* func applyAggressiveBreaking(data []float64, tolerance float64) {
 	if len(data) < 2 {
 		return
 	}
@@ -376,7 +437,7 @@ func applyAggressiveBreaking(data []float64, tolerance float64) {
 		data[i+1] -= change
 		budget -= math.Abs(2 * change)
 	}
-}
+} */
 
 func applyUniformBreaking(data []float64, tolerance float64) {
 	if len(data) < 2 {

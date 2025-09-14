@@ -40,6 +40,8 @@ type party struct {
 
 	greedyInputs [][]float64
 	greedyFlags  [][]int
+
+	attackVisibleData []float64
 }
 
 type task struct {
@@ -574,6 +576,12 @@ func attackParties(P []*party) (attackSuccessNum int) {
 	}
 
 	var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+
+	// Skip attack if the sequence contains encrypted markers - attacker can't see these!
+	if hasEncryptedMarkers(attacker_data_block) {
+		return 0 // Attack fails - can't read encrypted data
+	}
+
 	var matched_households = identifyParty(P, attacker_data_block, randomParty, randomStart)
 	if len(matched_households) == 1 && matched_households[0] == randomParty {
 		attackSuccessNum++
@@ -593,6 +601,16 @@ func getRandomStart(party int) int {
 		}
 	}
 	return randomStart
+}
+
+// Helper function to check if a sequence contains encrypted markers
+func hasEncryptedMarkers(data []float64) bool {
+	for _, val := range data {
+		if val == -0.1 {
+			return true
+		}
+	}
+	return false
 }
 
 func contains(party int, randomStart int) bool {
@@ -639,12 +657,18 @@ func uniqueDataBlock(P []*party, arr []float64, party int, index int, input_type
 
 func identifyParty(P []*party, arr []float64, party int, index int) []int {
 	var matched_households = []int{}
-	var dataset = P[party].encryptedInput[index : index+atdSize]
+	var dataset = P[party].rawInput[index : index+atdSize]
+
+	if rand.Float64() < 0.1 { // 1% of attacks
+		fmt.Printf("ATTACK DEBUG: Comparing %v vs %v\n", arr, dataset)
+		fmt.Printf("ATTACK DEBUG: Equal? %v\n", reflect.DeepEqual(dataset, arr))
+	}
+
 	var min_length int = int(math.Ceil(float64(len(arr)) * float64(min_percent_matched) / 100))
 
 	if min_length == len(arr) {
 		if uniqueATD == 0 {
-			if reflect.DeepEqual(dataset, arr) && uniqueDataBlock(P, dataset, party, index, "encryptedInput") {
+			if reflect.DeepEqual(dataset, arr) && uniqueDataBlock(P, dataset, party, index, "rawInput") {
 				matched_households = append(matched_households, party)
 			}
 		} else {
