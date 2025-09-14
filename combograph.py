@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 
-IN_CSV = "FIXEDadaptive1.csv"
+IN_CSV = "FinalResults.csv"
 OUT_DIR = "plots"
 
 def parse_time_to_seconds(s: str) -> float:
@@ -498,11 +498,11 @@ def main():
     make_baseline_ratio_vs_asr(df)
     
     # NEW: Individual plots separated by tolerance
-    print("\n=== Creating individual plots by tolerance ===")
-    make_individual_tolerance_plots(df, "sliding")
-    make_individual_tolerance_plots(df, "adaptive")
-    make_individual_tolerance_time_plots(df, "sliding")
-    make_individual_tolerance_time_plots(df, "adaptive")
+    #print("\n=== Creating individual plots by tolerance ===")
+    #make_individual_tolerance_plots(df, "sliding")
+    #make_individual_tolerance_plots(df, "adaptive")
+    #make_individual_tolerance_time_plots(df, "sliding")
+    #make_individual_tolerance_time_plots(df, "adaptive")
     
     # NEW: Combined comparison
     print("\n=== Creating combined comparison ===")
@@ -510,7 +510,7 @@ def main():
     
     # NEW: Individual improvement plots by tolerance
     print("\n=== Creating improvement plots by tolerance ===")
-    make_individual_tolerance_improvement_plots(df)
+    #make_individual_tolerance_improvement_plots(df)
     
     # NEW: Raw ASR value heatmaps
     print("\n=== Creating raw ASR heatmaps ===")
