@@ -123,7 +123,7 @@ def make_individual_tolerance_plots(df: pd.DataFrame, approach: str):
         
         plt.xlabel("Encryption Ratio (%)", fontsize=12)
         plt.ylabel("Attack Success Rate (ASR)", fontsize=12)
-        plt.title(f"{approach.capitalize()} Zero-sum Fuzzing — Tolerance {tol}", fontsize=14)
+        plt.title(f"{approach.capitalize()} Zero-Sum Fuzzing — Tolerance {tol}", fontsize=14)
         plt.xlim(tol_data["ratio"].min()-2, tol_data["ratio"].max()+2)
         plt.ylim(0, max(1, tol_data["asr"].max() * 1.1))
         plt.grid(True, alpha=0.3)
@@ -175,7 +175,7 @@ def make_individual_tolerance_time_plots(df: pd.DataFrame, approach: str):
         plt.ylabel("Runtime (seconds)", fontsize=12)
         ax = plt.gca()
         ax.yaxis.set_major_formatter(sec_formatter())
-        plt.title(f"{approach.capitalize()} Zero-sum Fuzzing — Runtime, Tolerance {tol}", fontsize=14)
+        plt.title(f"{approach.capitalize()} Zero-Sum Fuzzing — Runtime, Tolerance {tol}", fontsize=14)
         plt.xlim(tol_data["ratio"].min()-2, tol_data["ratio"].max()+2)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -226,7 +226,7 @@ def make_combined_tolerance_comparison(df: pd.DataFrame):
     
     plt.xlabel("Encryption Ratio (%)", fontsize=12)
     plt.ylabel("Attack Success Rate (ASR)", fontsize=12)
-    plt.title("Zero-sum Fuzzing Methods Comparison — ASR vs Encryption Ratio", fontsize=14)
+    plt.title("Zero-Sum Fuzzing Methods Comparison — ASR vs Encryption Ratio", fontsize=14)
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -334,7 +334,7 @@ def make_raw_asr_heatmaps_separate(df: pd.DataFrame):
             linecolor='white'
         )
         
-        plt.title(f"Raw ASR Values — {approach.capitalize()} Zero-sum Fuzzing vs Baseline", 
+        plt.title(f"Raw ASR Values — {approach.capitalize()} Zero-Sum Fuzzing vs Baseline", 
                  fontsize=14, pad=20)
         plt.xlabel("Encryption Ratio (%)", fontsize=12)
         plt.ylabel("Method (Tolerance)", fontsize=12)
@@ -441,7 +441,7 @@ def make_individual_tolerance_improvement_plots(df: pd.DataFrame):
         plt.ylabel("ASR Improvement vs Baseline (%)", fontsize=12)
         ax = plt.gca()
         ax.yaxis.set_major_formatter(pct_formatter())
-        plt.title(f"Zero-sum Fuzzing Performance — Tolerance {tol:.1f}", fontsize=14)
+        plt.title(f"Zero-Sum Fuzzing Performance — Tolerance {tol:.1f}", fontsize=14)
         plt.legend(fontsize=11)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -476,7 +476,7 @@ def make_pct_change_heatmaps(df: pd.DataFrame):
             fmt=".0f",
             cbar_kws={"label": "ASR change vs baseline (%)"}
         )
-        plt.title(f"{approach.capitalize()} Zero-sum Fuzzing — ASR Improvement (%)", fontsize=14)
+        plt.title(f"{approach.capitalize()} Zero-Sum Fuzzing | ASR Improvement (%)", fontsize=14)
         plt.xlabel("Encryption Ratio (%)", fontsize=12)
         plt.ylabel("Tolerance", fontsize=12)
         plt.tight_layout()
@@ -495,7 +495,7 @@ def main():
     df["asr"] = pd.to_numeric(df["asr"], errors="coerce")
 
     # Original plots
-    make_baseline_ratio_vs_asr(df)
+    #make_baseline_ratio_vs_asr(df)
     
     # NEW: Individual plots separated by tolerance
     #print("\n=== Creating individual plots by tolerance ===")
@@ -505,11 +505,11 @@ def main():
     #make_individual_tolerance_time_plots(df, "adaptive")
     
     # NEW: Combined comparison
-    print("\n=== Creating combined comparison ===")
+    #print("\n=== Creating combined comparison ===")
     make_combined_tolerance_comparison(df)
     
     # NEW: Individual improvement plots by tolerance
-    print("\n=== Creating improvement plots by tolerance ===")
+    #print("\n=== Creating improvement plots by tolerance ===")
     #make_individual_tolerance_improvement_plots(df)
     
     # NEW: Raw ASR value heatmaps
