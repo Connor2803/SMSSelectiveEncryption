@@ -22,6 +22,7 @@ var (
 	flagRatios    = flag.String("ratios", "", "comma-separated ratios, e.g. 35,40,45")
 	flagLoops     = flag.Int("loops", 200, "attack loops for ASR estimate")
 	flagATD       = flag.Int("atd", 24, "attacker leaked block size (samples)")
+	flagMatchPct  = flag.Int("match", 100, "minimum percentage match required (0-100)")
 	flagShowDebug = flag.Bool("debug", true, "print encryption coverage/debug info")
 	flagCSVOut    = flag.String("csv", "test_results.csv", "output CSV file")
 )
@@ -161,6 +162,7 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	// Configure attacker globals
 	uniqueATD = 0
 	atdSize = atd
+	min_percent_matched = *flagMatchPct // Set matching percentage from command line
 	maxHouseholdsNumber = len(P)
 	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
 

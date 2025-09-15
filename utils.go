@@ -669,6 +669,23 @@ func uniqueDataBlock(P []*party, arr []float64, party int, index int, input_type
 	return unique
 }
 
+// valuesMatchWithinTolerance checks if two values match within a given tolerance percentage
+// tolerance of 0.2 means values can differ by up to 20%
+func valuesMatchWithinTolerance(expected, actual, tolerance float64) bool {
+	if expected == 0.0 && actual == 0.0 {
+		return true
+	}
+	if expected == 0.0 {
+		return math.Abs(actual) <= tolerance
+	}
+
+	// Calculate the allowed range: expected ± (expected * tolerance)
+	lowerBound := expected * (1.0 - tolerance)
+	upperBound := expected * (1.0 + tolerance)
+
+	return actual >= lowerBound && actual <= upperBound
+}
+
 func identifyParty(P []*party, arr []float64, party int, index int) []int {
 	var matched_households = []int{}
 	var dataset = P[party].rawInput[index : index+atdSize]
@@ -678,48 +695,34 @@ func identifyParty(P []*party, arr []float64, party int, index int) []int {
 		fmt.Printf("ATTACK DEBUG: Equal? %v\n", reflect.DeepEqual(dataset, arr))
 	} */
 
-	var min_length int = int(math.Ceil(float64(len(arr)) * float64(min_percent_matched) / 100))
+	// Calculate tolerance for value-based matching
+	tolerance := 1.0 - (float64(min_percent_matched) / 100.0) // e.g., 80% -> 0.2 tolerance
 
-	if min_length == len(arr) {
-		if uniqueATD == 0 {
-			// For baseline testing, don't require uniqueness - just exact match
-			if reflect.DeepEqual(dataset, arr) {
-				matched_households = append(matched_households, party)
-			}
+	// Count how many values match within tolerance
+	var matchingValues int = 0
+	for i := 0; i < len(arr); i++ {
+		if valuesMatchWithinTolerance(arr[i], dataset[i], tolerance) {
+			matchingValues++
+		}
+	}
+
+	// Check if enough values match within tolerance
+	requiredMatches := int(math.Ceil(float64(len(arr)) * float64(min_percent_matched) / 100.0))
+	if matchingValues >= requiredMatches {
+		// For uniqueness checking, we still need to use the encrypted data comparison
+		var pos_matches = [][]float64{}
+		if atdSize <= sectionSize {
+			var pos_match1 = P[party].encryptedInput[index : index+requiredMatches]
+			var post_match2 = P[party].encryptedInput[index+atdSize-requiredMatches : index+atdSize]
+			pos_matches = append(pos_matches, pos_match1, post_match2)
 		} else {
-			if reflect.DeepEqual(dataset, arr) {
-				matched_households = append(matched_households, party)
+			for i := 0; i <= len(arr)-requiredMatches; i++ {
+				var pos_match = P[party].encryptedInput[index+i : index+requiredMatches+i]
+				pos_matches = append(pos_matches, pos_match)
 			}
 		}
-	} else {
-		var match int = 0
-		var mismatch int = 0
-		for i := 0; i < len(arr); i++ {
-			if reflect.DeepEqual(arr[i], dataset[i]) {
-				match += 1
-			} else {
-				mismatch += 1
-			}
-			if mismatch > (len(arr) - min_length) {
-				break
-			}
-		}
-
-		if float64(match)/float64(len(arr)) >= float64(min_percent_matched)/100.0 {
-			var pos_matches = [][]float64{}
-			if atdSize <= sectionSize {
-				var pos_match1 = P[party].encryptedInput[index : index+min_length]
-				var post_match2 = P[party].encryptedInput[index+atdSize-min_length : index+atdSize]
-				pos_matches = append(pos_matches, pos_match1, post_match2)
-			} else {
-				for i := 0; i <= len(arr)-min_length; i++ {
-					var pos_match = P[party].encryptedInput[index+i : index+min_length+i]
-					pos_matches = append(pos_matches, pos_match)
-				}
-			}
-			if uniqueDataBlocks(P, pos_matches, party, index, min_length) {
-				matched_households = append(matched_households, party)
-			}
+		if uniqueDataBlocks(P, pos_matches, party, index, requiredMatches) {
+			matched_households = append(matched_households, party)
 		}
 	}
 	return matched_households

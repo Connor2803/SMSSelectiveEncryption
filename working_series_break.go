@@ -347,12 +347,9 @@ func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float
 
 	result := copyMatrix(data)
 
-	// Make breaking MORE aggressive - scale tolerance up
-	effectiveTolerance := tolerance * 2.0 // Double the aggressiveness
-
 	for h := 0; h < len(data); h++ {
-		// Apply more disruptive breaking with household-specific variations
-		applyAggressiveBreakingWithHousehold(result[h], effectiveTolerance, h)
+		// Apply tolerance-scaled breaking with household-specific variations
+		applyAggressiveBreakingWithHousehold(result[h], tolerance, h)
 	}
 	return result
 }
@@ -362,43 +359,57 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 		return
 	}
 
-	//fmt.Printf("NUCLEAR: Processing %d values for household %d\n", len(data), householdIndex)
+	// Only show debug for first household to avoid spam
+	if householdIndex == 0 {
+		fmt.Printf("FUZZING: Processing %d values for household %d with tolerance %.3f\n", len(data), householdIndex, tolerance)
+	}
 
 	changes := 0
 
-	// MASSIVE HOUSEHOLD-SPECIFIC VARIATIONS to prevent sequence collisions
-	// With 80 households and ATD=4, we need HUGE variations between households
+	// Calculate total budget based on data sum and tolerance
+	totalSum := sum(data)
+	totalBudget := totalSum * tolerance
+
+	if householdIndex == 0 {
+		fmt.Printf("FUZZING: Total sum %.3f, budget %.3f (%.1f%%)\n", totalSum, totalBudget, tolerance*100)
+	}
+
+	// Distribute changes proportionally across value pairs
+	pairCount := len(data) / 2
+	if pairCount == 0 {
+		return
+	}
+
+	budgetPerPair := totalBudget / float64(pairCount)
+
+	// Add household-specific variation to prevent identical sequences across households
+	householdMultiplier := 1.0 + float64(householdIndex)*0.1 // 1.0, 1.1, 1.2, etc.
+
 	for i := 0; i < len(data)-1; i += 2 {
 		if i+1 < len(data) {
-			// Create MASSIVE household-specific variation to prevent identical sequences
-			baseChange := 0.1 + float64(householdIndex)*0.05 // 0.1 to 4.05 based on household
+			// Scale change amount by tolerance and add household variation
+			baseChangeAmount := budgetPerPair * householdMultiplier
 
-			// Add position-based variation for different windows within same household
-			positionVariation := float64(i%100) * 0.01 // 0.00 to 0.99 based on position
+			// Add some position-based variation within the budget
+			positionVariation := float64((i/2)%3) * 0.1 * baseChangeAmount // 0%, 10%, 20% variation
+			changeAmount := baseChangeAmount + positionVariation
 
-			// Add deterministic but unique component per household/position
-			uniqueComponent := float64(((householdIndex*2003)+(i*4001))%10000) / 100.0 // 0.00 - 99.99
-
-			changeAmount := baseChange + positionVariation + uniqueComponent
+			// Only show debug for first household and first few pairs
+			if householdIndex == 0 && i < 6 {
+				//fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
+			}
 
 			// Zero-sum redistribution: add to one, subtract from the other
-			if data[i] == 0.0 {
-				data[i] = changeAmount
-			} else {
-				data[i] += changeAmount
-			}
-
-			if data[i+1] == 0.0 {
-				data[i+1] = -changeAmount
-			} else {
-				data[i+1] -= changeAmount
-			}
+			data[i] += changeAmount
+			data[i+1] -= changeAmount
 
 			changes += 2
 		}
 	}
 
-	//fmt.Printf("NUCLEAR: Made %d MASSIVE changes for household %d (should be ~%d)\n", changes, householdIndex, len(data))
+	if householdIndex == 0 {
+		//mt.Printf("FUZZING: Made %d changes for household %d\n", changes, householdIndex)
+	}
 }
 
 // Keep the old function for backward compatibility

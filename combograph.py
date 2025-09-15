@@ -249,7 +249,7 @@ def make_raw_asr_heatmaps(df: pd.DataFrame):
     # Create method-tolerance combinations
     all_data["method_tol"] = all_data.apply(lambda row: 
         f"Baseline (SE only)" if row["approach"] == "none" 
-        else f"{row['approach'].capitalize()} (tol={row['tolerance']:.1f})", axis=1)
+        else f"{row['approach'].capitalize()} (tol={row['tolerance']:.2f})", axis=1)
     
     # Create pivot table
     pivot = all_data.pivot_table(index="method_tol", columns="ratio", values="asr", aggfunc="mean")
@@ -309,7 +309,7 @@ def make_raw_asr_heatmaps_separate(df: pd.DataFrame):
         # Create method-tolerance labels
         method_data["method_tol"] = method_data.apply(lambda row: 
             f"Baseline (SE only)" if row["approach"] == "none" 
-            else f"{row['approach'].capitalize()} (tol={row['tolerance']:.1f})", axis=1)
+            else f"{row['approach'].capitalize()} (tol={row['tolerance']:.2f})", axis=1)
         
         # Create pivot table
         pivot = method_data.pivot_table(index="method_tol", columns="ratio", values="asr", aggfunc="mean")
