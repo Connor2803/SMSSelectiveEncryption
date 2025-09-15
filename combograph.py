@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 
-IN_CSV = "FinalResults.csv"
+IN_CSV = "NewResults.csv"
 OUT_DIR = "plots"
 
 def parse_time_to_seconds(s: str) -> float:

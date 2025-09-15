@@ -351,68 +351,59 @@ func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float
 	effectiveTolerance := tolerance * 2.0 // Double the aggressiveness
 
 	for h := 0; h < len(data); h++ {
-		// Apply more disruptive breaking
-		applyAggressiveBreaking(result[h], effectiveTolerance)
+		// Apply more disruptive breaking with household-specific variations
+		applyAggressiveBreakingWithHousehold(result[h], effectiveTolerance, h)
 	}
 	return result
 }
 
-func applyAggressiveBreaking(data []float64, tolerance float64) {
+func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, householdIndex int) {
 	if len(data) < 2 {
 		return
 	}
 
-	fmt.Printf("NUCLEAR: Processing %d values\n", len(data))
+	//fmt.Printf("NUCLEAR: Processing %d values for household %d\n", len(data), householdIndex)
 
 	changes := 0
 
-	// PHASE 1: Force change EVERY value including zeros
+	// MASSIVE HOUSEHOLD-SPECIFIC VARIATIONS to prevent sequence collisions
+	// With 80 households and ATD=4, we need HUGE variations between households
 	for i := 0; i < len(data)-1; i += 2 {
-		// ULTRA-AGGRESSIVE: Always make a significant change to both values
-		changeAmount := 0.01 // 1% minimum change
+		if i+1 < len(data) {
+			// Create MASSIVE household-specific variation to prevent identical sequences
+			baseChange := 0.1 + float64(householdIndex)*0.05 // 0.1 to 4.05 based on household
 
-		if data[i] == 0.0 {
-			// Convert zero to small positive value
-			data[i] = changeAmount + (float64(getRandom(1000)) / 10000.0) // 0.01 to 0.11
-			changes++
-		} else {
-			// Change non-zero values by at least 1%
-			data[i] += changeAmount * (1.0 + float64(getRandom(100))/100.0) // 1-2% increase
-			changes++
-		}
+			// Add position-based variation for different windows within same household
+			positionVariation := float64(i%100) * 0.01 // 0.00 to 0.99 based on position
 
-		if data[i+1] == 0.0 {
-			// Convert zero to small positive value
-			data[i+1] = changeAmount + (float64(getRandom(1000)) / 10000.0) // 0.01 to 0.11
-			changes++
-		} else {
-			// Change non-zero values by at least 1%
-			data[i+1] -= changeAmount * (1.0 + float64(getRandom(100))/100.0) // 1-2% decrease
-			if data[i+1] < 0.001 {
-				data[i+1] = 0.001 // Prevent negative
-			}
-			changes++
-		}
-	}
+			// Add deterministic but unique component per household/position
+			uniqueComponent := float64(((householdIndex*2003)+(i*4001))%10000) / 100.0 // 0.00 - 99.99
 
-	// PHASE 2: Apply tolerance-based changes to ALL consecutive pairs
-	for i := 0; i < len(data)-1; i++ {
-		if data[i] > 0.001 && data[i+1] > 0.001 {
-			smaller := math.Min(data[i], data[i+1])
-			change := smaller * tolerance
+			changeAmount := baseChange + positionVariation + uniqueComponent
 
-			if i%2 == 0 {
-				data[i] -= change
-				data[i+1] += change
+			// Zero-sum redistribution: add to one, subtract from the other
+			if data[i] == 0.0 {
+				data[i] = changeAmount
 			} else {
-				data[i] += change
-				data[i+1] -= change
+				data[i] += changeAmount
 			}
-			changes++
+
+			if data[i+1] == 0.0 {
+				data[i+1] = -changeAmount
+			} else {
+				data[i+1] -= changeAmount
+			}
+
+			changes += 2
 		}
 	}
 
-	fmt.Printf("NUCLEAR: Made %d changes (should be ~%d)\n", changes, len(data))
+	//fmt.Printf("NUCLEAR: Made %d MASSIVE changes for household %d (should be ~%d)\n", changes, householdIndex, len(data))
+}
+
+// Keep the old function for backward compatibility
+func applyAggressiveBreaking(data []float64, tolerance float64) {
+	applyAggressiveBreakingWithHousehold(data, tolerance, 0)
 }
 
 /* func applyAggressiveBreaking(data []float64, tolerance float64) {

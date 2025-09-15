@@ -103,6 +103,7 @@ var asrList []float64
 var edgeNumberArray = []int{}
 var house_sample = []float64{}
 var elapsedTime time.Duration
+var originalLeakedData [][]float64 // For realistic attack: leaked data from original unfuzzed source
 
 // Utility functions
 func almostEqual(a, b float64) bool {
@@ -575,7 +576,20 @@ func attackParties(P []*party) (attackSuccessNum int) {
 		}
 	}
 
-	var attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+	// CRITICAL FIX: Attacker gets leaked data from ORIGINAL source (side channel)
+	// not from the fuzzed encrypted stream!
+	var attacker_data_block []float64
+	if originalLeakedData != nil && randomParty < len(originalLeakedData) {
+		// Realistic attack: leaked data comes from original unfuzzed source
+		if randomStart+atdSize <= len(originalLeakedData[randomParty]) {
+			attacker_data_block = originalLeakedData[randomParty][randomStart : randomStart+atdSize]
+		} else {
+			return 0 // Invalid range
+		}
+	} else {
+		// Fallback to old behavior
+		attacker_data_block = P[randomParty].rawInput[randomStart : randomStart+atdSize]
+	}
 
 	// Skip attack if the sequence contains encrypted markers - attacker can't see these!
 	if hasEncryptedMarkers(attacker_data_block) {
@@ -659,16 +673,17 @@ func identifyParty(P []*party, arr []float64, party int, index int) []int {
 	var matched_households = []int{}
 	var dataset = P[party].rawInput[index : index+atdSize]
 
-	if rand.Float64() < 0.1 { // 1% of attacks
+	/* 	if rand.Float64() < 0.1 { // 10% of attacks
 		fmt.Printf("ATTACK DEBUG: Comparing %v vs %v\n", arr, dataset)
 		fmt.Printf("ATTACK DEBUG: Equal? %v\n", reflect.DeepEqual(dataset, arr))
-	}
+	} */
 
 	var min_length int = int(math.Ceil(float64(len(arr)) * float64(min_percent_matched) / 100))
 
 	if min_length == len(arr) {
 		if uniqueATD == 0 {
-			if reflect.DeepEqual(dataset, arr) && uniqueDataBlock(P, dataset, party, index, "rawInput") {
+			// For baseline testing, don't require uniqueness - just exact match
+			if reflect.DeepEqual(dataset, arr) {
 				matched_households = append(matched_households, party)
 			}
 		} else {

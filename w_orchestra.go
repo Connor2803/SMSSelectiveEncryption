@@ -139,8 +139,11 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	encryptionRatio = ratio
 	runGreedyUniqSelectionAndEncrypt(P)
 
-	// Force the attacker to read the encrypted stream
+	// Set up attack scenario correctly:
+	// - Attacker gets leaked data from ORIGINAL (unfuzzed) side channel
+	// - But compares against FUZZED encrypted output
 	for pi, po := range P {
+		// What the attacker can see from encrypted stream (fuzzed + encryption markers)
 		po.attackVisibleData = make([]float64, len(po.encryptedInput))
 		for i := 0; i < len(po.encryptedInput); i++ {
 			if po.encryptedInput[i] == -0.1 {
@@ -149,7 +152,9 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 				po.attackVisibleData[i] = fuzzedData[pi][i] // Fuzzed value
 			}
 		}
-		// Attacker sees the attack-visible data
+
+		// CRITICAL FIX: rawInput should contain FUZZED data for attack targets
+		// but leaked data should come from ORIGINAL data
 		po.rawInput = po.attackVisibleData
 	}
 
@@ -168,7 +173,10 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 			100.0*float64(wClean)/float64(wAll))
 	}
 
-	// 5) Run attacker loops on encrypted stream
+	// 5) Set original data for realistic attack leaked sequences
+	originalLeakedData = original
+
+	// 6) Run attacker loops on encrypted stream
 	asr := runAttackAverage(P, loops)
 	return asr, time.Since(comboStart)
 }
