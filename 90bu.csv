@@ -1,4 +1,4 @@
-approach,tolerance,ratio,asr,time
+adaptive,0.00,50,0.4820,3m3.9851459s
 adaptive,0.00,50,0.4820,3m3.9851459s
 adaptive,0.01,50,0.0290,1m28.6407792s
 adaptive,0.02,50,0.0040,1m24.7006132s
