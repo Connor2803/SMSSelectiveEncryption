@@ -1,4 +1,5 @@
-# python ./ELECTRICITY_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py
+# python
+# ./ELECTRICITY_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py <leaked plaintext size> [target_avg_ratio] <phase type>
 import os
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -558,54 +559,53 @@ def call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, tar
     testing_households = env_test._active_households.copy()
 
     household_decisions = {}
+    encryption_ratios = env_test._encryption_ratios
+    num_ratios = len(encryption_ratios)
 
     print("Determining ideal encryption ratio for each household...")
     for household_id in testing_households:
+        # Initial action for each household is the one from the optimal policy
         obs = env_test._set_household(household_id)
-        
-        rewards_for_ratios = []
-        for action_idx, ratio in enumerate(env_test._encryption_ratios):
-            # Temporarily step the environment to get the reward for this action
-            _obs, reward, _terminated, _truncated, _info = env_test.step(action_idx)
-            rewards_for_ratios.append(reward)
-
-        best_action_idx = np.argmax(rewards_for_ratios)
+        action, _ = model.predict(obs, deterministic=True)
         household_decisions[household_id] = {
-            "current_action_idx": best_action_idx,
-            "rewards_per_action": rewards_for_ratios
+            "current_action_idx": action,
         }
-
-    initial_ratios = [env_test._encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+    
+    initial_ratios = [encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
     current_avg_ratio = np.mean(initial_ratios)
+    target_ratio_float = np.float64(float(target_avg_ratio))
     print(f"Initial average ratio from optimal choices: {current_avg_ratio:.4f}")
 
-    while current_avg_ratio > np.float64(float(target_avg_ratio)):
-        best_household_to_downgrade = None
-        min_reward_loss = float('inf')
+    while abs(current_avg_ratio - target_ratio_float) > 1e-4:
+        if current_avg_ratio > target_ratio_float:
+            downgraded = False
+            for household_id, data in household_decisions.items():
+                current_idx = data["current_action_idx"]
+                if current_idx > 0:
+                    household_decisions[household_id]["current_action_idx"] -= 1
+                    downgraded = True
+                    break 
 
-        for household_id, data in household_decisions.items():
-            current_idx = data["current_action_idx"]
+            if not downgraded:
+                print("Cannot downgrade further. All households are at the minimum ratio.")
+                break
 
-            if current_idx == 0:
-                continue
+        elif current_avg_ratio < target_ratio_float:
+            upgraded = False
+            for household_id, data in household_decisions.items():
+                current_idx = data["current_action_idx"]
+                if current_idx < num_ratios - 1:
+                    household_decisions[household_id]["current_action_idx"] += 1
+                    upgraded = True
+                    break 
+            
+            if not upgraded:
+                print("Cannot upgrade further. All households are at the maximum ratio.")
+                break
 
-            reward_at_current_ratio = data["rewards_per_action"][current_idx]
-            reward_at_lower_ratio = data["rewards_per_action"][current_idx - 1]
-            reward_loss = reward_at_current_ratio - reward_at_lower_ratio
-
-            if reward_loss < min_reward_loss:
-                min_reward_loss = reward_loss
-                best_household_to_downgrade = household_id
-        
-        if best_household_to_downgrade is None:
-            print("Cannot downgrade further. All households are at the minimum ratio.")
-            break
-
-        household_decisions[best_household_to_downgrade]["current_action_idx"] -= 1
-
-        new_ratios = [env_test._encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+        new_ratios = [encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
         current_avg_ratio = np.mean(new_ratios)
-        print(f"Downgraded household {best_household_to_downgrade}. New avg ratio: {current_avg_ratio:.4f}")
+        print(f"New avg ratio: {current_avg_ratio:.4f}")
 
     print("\nFinal decisions made. Writing to log...")
     with open(
@@ -616,10 +616,8 @@ def call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, tar
 
         for i, household_id in enumerate(testing_households):
             final_action = household_decisions[household_id]["current_action_idx"]
-            
             env_test._set_household(household_id)
             _obs, reward, _terminated, _truncated, info_step = env_test.step(final_action)
-            
             log_to_csv(writer, i + 1, household_id, reward, info_step)
 
     print("Fixed encryption ratio testing phase completed.")

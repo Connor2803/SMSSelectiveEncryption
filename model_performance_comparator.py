@@ -22,16 +22,19 @@ electricity_test_households = ["MAC000221.csv",
 "MAC000246.csv"]
 
 
-water_test_households = ["e158012f-5c69-4a20-9a41-f7acde0e0ddd.csv",
-                         "e363b1f3-f503-48b4-b87c-98fe07632c02.csv",
-                         "e41dddd2-87dd-4d4b-bdb6-9859c34768f1.csv",
-                         "e76658cf-88ea-4123-8715-0248909dd88b.csv",
-                         "f12f91f7-81ca-4b7c-a5e8-3b81c4e5720b.csv",
-                         "f45ff6bf-08c4-450d-bbf3-5597f66c68ba.csv",
-                         "f5850315-552a-440f-9871-173212ad467f.csv",
-                         "f5a28746-11f7-423f-9ae0-204a9b6d50ac.csv",
-                         "faea8eb7-c134-4c8b-99ac-c2c7ddd60d8b.csv",
-                         ]
+water_test_households = [
+"c996d9cf-7826-4154-b141-e3e5e5a7b4aa.csv",
+"cad98ba0-ebb5-4f15-bc8f-09a617dd4d05.csv",
+"cd2a63c5-e1ab-4000-a286-9628f856af4b.csv",
+"d0af00c0-d13a-48ae-9347-98ad85eebbc2.csv",
+"d0d09ece-30bb-431f-b812-4e39bfb33198.csv",
+"d1f0f31d-17e2-484a-9b09-6b7cfc568102.csv",
+"d631238e-0e45-42ac-9627-0a9d1d62fad9.csv",
+"d6b1a7de-ae5e-45e8-9a53-f58484c9fd2f.csv",
+"dbffe40c-8549-4d27-9b68-a3f1b580f28c.csv",
+"e14e44b0-1b85-4343-a618-61e92984adfd.csv"
+]
+
 
 def parse_ratios_string(s: str) -> dict:
     ratios_by_hh = defaultdict(list)
@@ -197,8 +200,8 @@ def main():
     #         target_average_ratio = None
 
     folder_names = [
-        "ELECTRICITY_household_level_encryption_ratio_selector",
-        # "WATER_household_level_encryption_ratio_selector",
+        # "ELECTRICITY_household_level_encryption_ratio_selector",
+        "WATER_household_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector",
         # "WATER_block_level_encryption_ratio_selector",
         # "ELECTRICITY_block_level_encryption_ratio_selector_with_policy",

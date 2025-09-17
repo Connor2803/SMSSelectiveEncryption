@@ -1,4 +1,6 @@
-# python ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py <leaked plaintext size> <phase type>
+# python
+# ./WATER_household_level_encryption_ratio_selector/household_level_encryption_ratio_selector.py
+# <leaked plaintext size> [target_avg_ratio] <phase type>
 import os
 import gymnasium as gym
 from stable_baselines3 import DQN
@@ -52,7 +54,7 @@ print(f"\nGo source path: {GO_SOURCE_PATH}")
 
 
 class EncryptionSelectorEnv(gym.Env):
-    def __init__(self, dataset_type="train"):
+    def __init__(self, dataset_type):
         super().__init__()
 
         self._encryption_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -112,13 +114,13 @@ class EncryptionSelectorEnv(gym.Env):
         self._testing_households = permanent_testing_IDs
 
         self._active_households = None  # This will store the list of households for the current phase.
-        self.dataset_type = dataset_type
+        self._dataset_type = dataset_type
 
-        if dataset_type == "train":
+        if self._dataset_type == "train":
             self._active_households = self._training_households
-        elif dataset_type == "validation":
+        elif self._dataset_type == "validation":
             self._active_households = self._validation_households
-        elif dataset_type == "test":
+        elif self._dataset_type == "test":
             self._active_households = self._testing_households
         else:
             raise ValueError("dataset_type must be train, validation, or test")
@@ -307,7 +309,7 @@ class EncryptionSelectorEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        if self.dataset_type == "train":
+        if self._dataset_type == "train":
             self._current_household_ID = random.choice(self._active_households)
         elif self._current_household_ID is None:
             self._current_household_ID = self._active_households[0]
@@ -552,14 +554,84 @@ def call_testing_phase(current_leaked_plaintext_size):
 
             log_to_csv(writer, i + 1, household_id, reward, info_step)
 
+def call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio):
+    model = DQN.load(
+        f"./WATER_household_level_encryption_ratio_selector/DQN_Household_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip")
+    env_test = EncryptionSelectorEnv(dataset_type="test")
+    testing_households = env_test._active_households.copy()
+
+    household_decisions = {}
+    encryption_ratios = env_test._encryption_ratios
+    num_ratios = len(encryption_ratios)
+
+    print("Determining ideal encryption ratio for each household...")
+    for household_id in testing_households:
+        # Initial action for each household is the one from the optimal policy
+        obs = env_test._set_household(household_id)
+        action, _ = model.predict(obs, deterministic=True)
+        household_decisions[household_id] = {
+            "current_action_idx": action,
+        }
+    
+    initial_ratios = [encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+    current_avg_ratio = np.mean(initial_ratios)
+    target_ratio_float = np.float64(float(target_avg_ratio))
+    print(f"Initial average ratio from optimal choices: {current_avg_ratio:.4f}")
+
+    while abs(current_avg_ratio - target_ratio_float) > 1e-4:
+        if current_avg_ratio > target_ratio_float:
+            downgraded = False
+            for household_id, data in household_decisions.items():
+                current_idx = data["current_action_idx"]
+                if current_idx > 0:
+                    household_decisions[household_id]["current_action_idx"] -= 1
+                    downgraded = True
+                    break 
+
+            if not downgraded:
+                print("Cannot downgrade further. All households are at the minimum ratio.")
+                break
+
+        elif current_avg_ratio < target_ratio_float:
+            upgraded = False
+            for household_id, data in household_decisions.items():
+                current_idx = data["current_action_idx"]
+                if current_idx < num_ratios - 1:
+                    household_decisions[household_id]["current_action_idx"] += 1
+                    upgraded = True
+                    break 
+            
+            if not upgraded:
+                print("Cannot upgrade further. All households are at the maximum ratio.")
+                break
+
+        new_ratios = [encryption_ratios[data["current_action_idx"]] for data in household_decisions.values()]
+        current_avg_ratio = np.mean(new_ratios)
+        print(f"New avg ratio: {current_avg_ratio:.4f}")
+
+    print("\nFinal decisions made. Writing to log...")
+    with open(
+            f"./WATER_household_level_encryption_ratio_selector/testing_log_{current_leaked_plaintext_size}_{target_avg_ratio}_fixed_encryption_ratio.csv",
+            "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(log_headers)
+
+        for i, household_id in enumerate(testing_households):
+            final_action = household_decisions[household_id]["current_action_idx"]
+            env_test._set_household(household_id)
+            _obs, reward, _terminated, _truncated, info_step = env_test.step(final_action)
+            log_to_csv(writer, i + 1, household_id, reward, info_step)
+
+    print("Fixed encryption ratio testing phase completed.")
+
 def main():
-    if len(sys.argv) != 3:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and phase type as arguments.")
-        current_leaked_plaintext_size = "12"
-        user_chosen_phase_type = "training"
+    if len(sys.argv) != 4:
+        print("WARNING: Not enough arguments provided!")
+        sys.exit(1)
     else:
         current_leaked_plaintext_size = sys.argv[1]
-        user_chosen_phase_type = sys.argv[2]
+        target_avg_ratio = sys.argv[2]
+        user_chosen_phase_type = sys.argv[3]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -570,23 +642,23 @@ def main():
     if not os.path.exists(GO_EXECUTABLE_PATH):
         raise FileNotFoundError(f"Go executable not found at: {GO_EXECUTABLE_PATH}")
 
-    print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
-    try:
-        run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
-        subprocess.run(run_args,
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=3600  # 1 hour
-                        )
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to run Go program: {e}")
-        print(f"Stderr: {e.stderr}")
-        return
-
 
     print(f"\nUser chosen phase type: {user_chosen_phase_type}")
     if user_chosen_phase_type == "training":
+        print(f"Running Go metrics generator with plaintext size = {current_leaked_plaintext_size}...")
+        try:
+            run_args = [GO_EXECUTABLE_PATH, "1", current_leaked_plaintext_size]
+            subprocess.run(run_args,
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=3600  # 1 hour
+                            )
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to run Go program: {e}")
+            print(f"Stderr: {e.stderr}")
+            return
+
         print("\nStarting training phase...")
         start_training_time = time.time()
         call_training_phase(current_leaked_plaintext_size)
@@ -606,6 +678,13 @@ def main():
         print("\nStarting testing phase...")
         call_testing_phase(current_leaked_plaintext_size)
         print("\nTesting phase completed.")
+
+    elif (user_chosen_phase_type == "fixed_encryption_ratio_test"):
+        print("\nStarting fixed encryption ratio testing phase...")
+        call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio)
+        print("\nFixed encryption ratio testing phase phase completed.")
+    
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
