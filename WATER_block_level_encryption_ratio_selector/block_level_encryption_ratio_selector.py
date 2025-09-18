@@ -1,4 +1,6 @@
-# python ./WATER_block_level_encryption_ratio_selector/block_level_encryption_ratio_selector.py
+# python
+# ./WATER_block_level_encryption_ratio_selector/block_level_encryption_ratio_selector.py
+# <leaked plaintext size> [target avg ratio] <phase type>
 
 import csv
 import json
@@ -1027,15 +1029,176 @@ def call_testing_phase(current_leaked_plaintext_size):
     # elapsed_time_ph = end_time_ph - start_time_ph
     # print(f"Total per-household testing duration: {elapsed_time_ph:.2f} seconds")
 
+def call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio):
+    model_path = f"./WATER_block_level_encryption_ratio_selector/DQN_Block_Level_Encryption_Ratio_Selector_{current_leaked_plaintext_size}.zip"
+    if not os.path.exists(model_path):
+        print(f"ERROR: Model not found at {model_path}. Please train the block-level model first.")
+        return
+        
+    model = DQN.load(model_path)
+    env_test = EncryptionSelectorEnv(dataset_type="test")
+    testing_households = env_test._active_households.copy()
+    encryption_ratios = np.array(env_test._encryption_ratios)
+    
+    final_household_block_decisions = {}
+    target_ratio_float = float(target_avg_ratio)
+
+    print(f"Starting block-level adjustment process for a target ratio of {target_ratio_float:.2f} per household...")
+
+    for household_id in testing_households:
+        block_decisions = []
+        
+        household_sections_df = env_test._df[env_test._df['Household ID'] == household_id].sort_values(by="Section Number")
+        
+        for _, section_row in household_sections_df.iterrows():
+            utility_readings = section_row["All Utility Readings in Section"]
+            obs = {
+                "section_level_water_usage": np.array([section_row["Per Section Utility Usage"]], dtype=np.float64),
+                "section_raw_entropy": np.array([env_test._calculate_entropy(utility_readings)], dtype=np.float64)
+            }
+            action, _ = model.predict(obs, deterministic=True)
+            block_decisions.append(action)
+
+        block_ratios = [encryption_ratios[action] for action in block_decisions]
+        current_avg_ratio = np.mean(block_ratios)
+        
+        while abs(current_avg_ratio - target_ratio_float) > 1e-4:
+            if current_avg_ratio > target_ratio_float:
+                idx_to_decrease = np.argmax(block_decisions)
+                if block_decisions[idx_to_decrease] > 0:
+                    block_decisions[idx_to_decrease] -= 1
+                else:
+                    break 
+            else: # current_avg_ratio < target_ratio_float
+               
+                idx_to_increase = np.argmin(block_decisions)
+                if block_decisions[idx_to_increase] < len(encryption_ratios) - 1:
+                    block_decisions[idx_to_increase] += 1
+                else:
+                    break 
+            
+            current_avg_ratio = np.mean([encryption_ratios[action] for action in block_decisions])
+
+        final_household_block_decisions[household_id] = block_decisions
+        print(f"  - Household {household_id}: Final Avg Ratio: {current_avg_ratio:.4f}")
+
+    print("\nFinal decisions made. Preparing data for Go program...")
+    
+    final_choices_for_go = {}
+    all_households_df = env_test._df[env_test._df['Household ID'].isin(testing_households)]
+
+    for household_id in testing_households:
+        household_sections_df = all_households_df[all_households_df['Household ID'] == household_id].sort_values(by="Section Number")
+        
+        final_actions = final_household_block_decisions[household_id]
+
+        for i, (_, section_row) in enumerate(household_sections_df.iterrows()):
+            section_num = section_row["Section Number"]
+            raw_readings = section_row["All Utility Readings in Section"]
+            
+            final_ratio = encryption_ratios[final_actions[i]] # Use the specific ratio for this block
+            
+            raw_entropy = env_test._calculate_entropy(raw_readings)
+            encrypted_quantised_data = env_test._apply_encryption_ratio_and_quantisation(raw_readings, final_ratio)
+            remaining_entropy = env_test._calculate_entropy(encrypted_quantised_data)
+            
+            final_choices_for_go[(household_id, section_num)] = {
+                "ratio": final_ratio, "raw_entropy": raw_entropy,
+                "remaining_entropy": remaining_entropy, "original_utility_readings": raw_readings,
+            }
+
+    try:
+        data_for_go = [
+            {"household_id": str(k[0]), "section_number": int(k[1]), **v}
+            for k, v in final_choices_for_go.items()
+        ]
+        data_for_go_filepath = os.path.join(SCRIPT_DIR, f"RL_V2_choices_granular_{target_avg_ratio}.json")
+        with open(data_for_go_filepath, "w") as f: json.dump(data_for_go, f)
+
+        print("Calling Go program to calculate final metrics...")
+        go_result = subprocess.run(
+            [GO_EXECUTABLE_PATH, data_for_go_filepath, current_leaked_plaintext_size],
+            capture_output=True, text=True, check=True, timeout=3600
+        )
+        
+        go_metrics = json.loads(go_result.stdout)
+        all_party_metrics = go_metrics.get("allPartyMetrics", {})
+        
+        log_path = f"./WATER_block_level_encryption_ratio_selector/testing_log_{current_leaked_plaintext_size}_{target_avg_ratio}_fixed_encryption_ratio.csv"
+        with open(log_path, "w", newline="") as file:
+            writer = csv.writer(file)
+            
+            log_headers = [
+                "Target Household Ratio", "Global Average Ratio", "Processed Households", "Per Block Encryption Ratios",
+                "Reidentification Rate", "Advanced Reidentification Rate", "Reidentification Duration (NS)", "Memory Consumption (MiB)",
+                "Global Summation Error", "Global Deviation Error", "Global Encryption Time (NS)", "Global Decryption Time (NS)",
+                "Global Summation Operations Time (NS)", "Global Deviation Operations Time (NS)",
+                "Per-Party Summation Errors", "Per-Party Deviation Errors", "Per-Party Encryption Times (NS)",
+                "Per-Party Decryption Times (NS)", "Per-Party Summation Operations Times (NS)", "Per-Party Deviation Operations Times (NS)"
+            ]
+            writer.writerow(log_headers)
+
+
+            all_actions = [action for actions_list in final_household_block_decisions.values() for action in actions_list]
+            global_average_ratio = np.mean([encryption_ratios[action] for action in all_actions])
+
+            per_block_ratios_list = []
+            for hh_id, actions in sorted(final_household_block_decisions.items()):
+                ratios = [f"{encryption_ratios[a]:.1f}" for a in actions]
+                per_block_ratios_list.append(f"{hh_id}:[{','.join(ratios)}]")
+            per_block_ratios_str = "; ".join(per_block_ratios_list)
+            
+            global_sum_error = sum(p.get("summationError", 0) for p in all_party_metrics.values())
+            global_dev_error = sum(p.get("deviationError", 0) for p in all_party_metrics.values())
+            global_enc_time = sum(p.get("encryptionTimeNS", 0) for p in all_party_metrics.values())
+            global_dec_time = sum(p.get("decryptionTimeNS", 0) for p in all_party_metrics.values())
+            global_sum_ops_time = sum(p.get("summationOpsTimeNS", 0) for p in all_party_metrics.values())
+            global_dev_ops_time = sum(p.get("deviationOpsTimeNS", 0) for p in all_party_metrics.values())
+
+            sorted_metrics = sorted(all_party_metrics.values(), key=lambda x: x['partyID'])
+            per_party_sum_errors = "; ".join([f"{p['partyID']}:{p.get('summationError', 0):.6f}" for p in sorted_metrics])
+            per_party_dev_errors = "; ".join([f"{p['partyID']}:{p.get('deviationError', 0):.6f}" for p in sorted_metrics])
+            per_party_enc_times = "; ".join([f"{p['partyID']}:{p.get('encryptionTimeNS', 0)}" for p in sorted_metrics])
+            per_party_dec_times = "; ".join([f"{p['partyID']}:{p.get('decryptionTimeNS', 0)}" for p in sorted_metrics])
+            per_party_sum_ops_times = "; ".join([f"{p['partyID']}:{p.get('summationOpsTimeNS', 0)}" for p in sorted_metrics])
+            per_party_dev_ops_times = "; ".join([f"{p['partyID']}:{p.get('deviationOpsTimeNS', 0)}" for p in sorted_metrics])
+
+            writer.writerow([
+                target_avg_ratio,
+                f"{global_average_ratio:.4f}",
+                ", ".join(sorted(testing_households)),
+                per_block_ratios_str,
+                go_metrics.get("globalReidentificationRate"),
+                go_metrics.get("globalAdvancedReidentificationRate"),
+                go_metrics.get("globalReidentificationDurationNS"),
+                go_metrics.get("globalMemoryConsumptionMiB"),
+                global_sum_error,
+                global_dev_error,
+                global_enc_time,
+                global_dec_time,
+                global_sum_ops_time,
+                global_dev_ops_time,
+                per_party_sum_errors,
+                per_party_dev_errors,
+                per_party_enc_times,
+                per_party_dec_times,
+                per_party_sum_ops_times,
+                per_party_dev_ops_times
+            ])
+        print(f"Granular testing phase completed. Results saved to {log_path}")
+
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"An error occurred during Go subprocess execution or logging: {e}")
+        if hasattr(e, 'stderr'): print(f"Stderr: {e.stderr}")
 
 def main():
-    if len(sys.argv) != 3:
-        print("WARNING: Not enough arguments provided! Please provide the leaked plaintext size and phase type as arguments.")
-        current_leaked_plaintext_size = "12"
-        user_chosen_phase_type = "training"
+    if len(sys.argv) != 4:
+        print("WARNING: Not enough arguments provided!")
+        sys.exit(1)
     else:
         current_leaked_plaintext_size = sys.argv[1]
-        user_chosen_phase_type = sys.argv[2]
+        target_avg_ratio = sys.argv[2]
+        user_chosen_phase_type = sys.argv[3]
 
     try:
         subprocess.run(["go", "build", "-o", GO_EXECUTABLE_PATH, GO_SOURCE_PATH], check=True)
@@ -1067,6 +1230,11 @@ def main():
         print("\nStarting testing phase...")
         call_testing_phase(current_leaked_plaintext_size)
         print("\nTesting phase completed.")
+
+    elif (user_chosen_phase_type == "fixed_encryption_ratio_test"):
+        print("\nStarting fixed encryption ratio testing phase...")
+        call_fixed_encryption_ratio_testing_phase(current_leaked_plaintext_size, target_avg_ratio)
+        print("\nFixed encryption ratio testing phase phase completed.")
 
 
 if __name__ == "__main__":
