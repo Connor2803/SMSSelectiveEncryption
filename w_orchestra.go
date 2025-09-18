@@ -23,7 +23,9 @@ var (
 	flagLoops     = flag.Int("loops", 200, "attack loops for ASR estimate")
 	flagATD       = flag.Int("atd", 24, "attacker leaked block size (samples)")
 	flagMatchPct  = flag.Int("match", 100, "minimum percentage match required (0-100)")
+	flagFuzzPct   = flag.Int("fuzz-pct", 100, "percentage of datapoints to fuzz (0-100, 100=all data)")
 	flagShowDebug = flag.Bool("debug", true, "print encryption coverage/debug info")
+	flagASRDebug  = flag.Bool("asr-debug", false, "print detailed ASR attack verification info")
 	flagCSVOut    = flag.String("csv", "test_results.csv", "output CSV file")
 )
 
@@ -53,6 +55,7 @@ func main() {
 	// Dataset and global thresholds
 	currentDataset = DATASET_ELECTRICITY
 	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
+	asrDebugMode = *flagASRDebug
 
 	// 1) Load data using utils.getFileList + resizeCSV
 	println("Testing series breaking and uniqueness selection for electricity data...")
@@ -77,7 +80,7 @@ func main() {
 
 	for _, tol := range tolVals {
 		for _, ratio := range ratioVals {
-			asr, took := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagShowDebug)
+			asr, took := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagFuzzPct, *flagShowDebug)
 
 			// Console output
 			fmt.Printf("Result: approach=%s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d, time=%s)\n",
@@ -95,7 +98,7 @@ func main() {
 }
 
 // Run a single (tol, ratio) combo end-to-end and return ASR
-func runOneCombo(original [][]float64, fileList []string, approach string, tol float64, ratio int, loops int, atd int, showDebug bool) (float64, time.Duration) {
+func runOneCombo(original [][]float64, fileList []string, approach string, tol float64, ratio int, loops int, atd int, fuzzPct int, showDebug bool) (float64, time.Duration) {
 	comboStart := time.Now()
 	// 2) Series breaking from original each time (no carry-over)
 	var broken [][]float64
@@ -104,9 +107,9 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	} else {
 		switch strings.ToLower(approach) {
 		case "sliding":
-			broken = applyWindowBasedBreaking(original, tol)
+			broken = applyWindowBasedBreaking(original, tol, fuzzPct)
 		case "adaptive":
-			broken = applyAdaptivePatternBreaking(original, tol)
+			broken = applyAdaptivePatternBreaking(original, tol, fuzzPct)
 		default:
 			panic("approach must be sliding|adaptive|none")
 		}
@@ -314,6 +317,17 @@ func runAttackAverage(P []*party, loops int) float64 {
 	successCount := 0
 	for i := 0; i < loops; i++ {
 		successCount += attackParties(P) // returns 0 or 1
+
+		// Progress logging for ASR debug mode - show every 1000 attacks
+		if asrDebugMode && (i+1)%1000 == 0 {
+			currentASR := float64(successCount) / float64(i+1)
+			fmt.Printf("ASR DEBUG: Progress %d/%d attacks, current ASR: %.4f\n", i+1, loops, currentASR)
+		}
+	}
+
+	if asrDebugMode {
+		finalASR := float64(successCount) / float64(loops)
+		fmt.Printf("ASR DEBUG: Final result %d/%d successful attacks, ASR: %.4f\n", successCount, loops, finalASR)
 	}
 
 	// Return success rate as proportion

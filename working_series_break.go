@@ -41,13 +41,17 @@ func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
 	// Convert real data to our format
 	originalData := loadRealElectricityData(fileList)
 
-	// Test both approaches
+	// Test both approaches - using 100% fuzzing for legacy tests
 	approaches := []struct {
 		name     string
 		function func([][]float64, float64) [][]float64
 	}{
-		{"Sliding Window Breaking", applyWindowBasedBreaking},
-		{"Adaptive Pattern Breaking", applyAdaptivePatternBreaking},
+		{"Sliding Window Breaking", func(data [][]float64, tolerance float64) [][]float64 {
+			return applyWindowBasedBreaking(data, tolerance, 100)
+		}},
+		{"Adaptive Pattern Breaking", func(data [][]float64, tolerance float64) [][]float64 {
+			return applyAdaptivePatternBreaking(data, tolerance, 100)
+		}},
 	}
 
 	// Store all results for CSV output
@@ -281,7 +285,7 @@ func loadRealElectricityData(fileList []string) [][]float64 {
 }
 
 // Approach 1: Sliding Window Breaking
-func applyWindowBasedBreaking(data [][]float64, tolerance float64) [][]float64 {
+func applyWindowBasedBreaking(data [][]float64, tolerance float64, fuzzPct int) [][]float64 {
 	if tolerance <= 0 {
 		return copyMatrix(data)
 	}
@@ -289,8 +293,8 @@ func applyWindowBasedBreaking(data [][]float64, tolerance float64) [][]float64 {
 	result := copyMatrix(data)
 
 	for h := 0; h < len(data); h++ {
-		// Apply sliding window with randomized redistribution
-		applyRandomizedSlidingBreaking(result[h], tolerance)
+		// Apply sliding window with randomized redistribution and partial fuzzing
+		applyRandomizedSlidingBreaking(result[h], tolerance, fuzzPct)
 	}
 
 	return result
@@ -320,48 +324,68 @@ func redistributeRandomly(window []float64, budget float64) {
 	}
 }
 
-func applyRandomizedSlidingBreaking(data []float64, tolerance float64) {
+func applyRandomizedSlidingBreaking(data []float64, tolerance float64, fuzzPct int) {
 	totalSum := sum(data)
 	budget := totalSum * tolerance
 	windowSize := 4
 
-	// Non-overlapping windows: step by windowSize
-	for i := 0; i+windowSize <= len(data) && budget > 0; i += windowSize {
+	// Calculate how many windows to fuzz based on percentage
+	totalWindows := (len(data)-windowSize)/windowSize + 1
+	windowsToFuzz := int(float64(totalWindows) * float64(fuzzPct) / 100.0)
+	if windowsToFuzz < 1 && fuzzPct > 0 {
+		windowsToFuzz = 1 // Always fuzz at least 1 window if percentage > 0
+	}
+
+	// Create list of window start positions and shuffle them
+	windowStarts := make([]int, 0, totalWindows)
+	for i := 0; i+windowSize <= len(data); i += windowSize {
+		windowStarts = append(windowStarts, i)
+	}
+
+	// Shuffle the window positions
+	for i := len(windowStarts) - 1; i > 0; i-- {
+		j := getRandom(i + 1)
+		windowStarts[i], windowStarts[j] = windowStarts[j], windowStarts[i]
+	}
+
+	// Only fuzz the selected number of windows
+	budgetPerWindow := budget / float64(windowsToFuzz)
+	for idx := 0; idx < windowsToFuzz && idx < len(windowStarts); idx++ {
+		i := windowStarts[idx]
 		window := data[i : i+windowSize]
 		windowSum := sum(window)
-		windowBudget := math.Min(budget, windowSum*tolerance)
+		windowBudget := math.Min(budgetPerWindow, windowSum*tolerance)
 
 		redistributeRandomly(window, windowBudget)
-		budget -= windowBudget
 	}
 }
 
 // Approach 2: Adaptive Pattern Breaking
-func applyAdaptivePatternBreaking(data [][]float64, tolerance float64) [][]float64 {
+func applyAdaptivePatternBreaking(data [][]float64, tolerance float64, fuzzPct int) [][]float64 {
 	if tolerance <= 0 {
 		return copyMatrix(data)
 	}
 	if tolerance > 0 {
-		fmt.Printf("FUZZING CALLED with tolerance %.2f\n", tolerance)
+		fmt.Printf("FUZZING CALLED with tolerance %.2f, fuzzing %d%% of datapoints\n", tolerance, fuzzPct)
 	}
 
 	result := copyMatrix(data)
 
 	for h := 0; h < len(data); h++ {
-		// Apply tolerance-scaled breaking with household-specific variations
-		applyAggressiveBreakingWithHousehold(result[h], tolerance, h)
+		// Apply tolerance-scaled breaking with household-specific variations and partial fuzzing
+		applyAggressiveBreakingWithHousehold(result[h], tolerance, h, fuzzPct)
 	}
 	return result
 }
 
-func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, householdIndex int) {
+func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, householdIndex int, fuzzPct int) {
 	if len(data) < 2 {
 		return
 	}
 
 	// Only show debug for first household to avoid spam
 	if householdIndex == 0 {
-		fmt.Printf("FUZZING: Processing %d values for household %d with tolerance %.3f\n", len(data), householdIndex, tolerance)
+		fmt.Printf("FUZZING: Processing %d values for household %d with tolerance %.3f, fuzzing %d%%\n", len(data), householdIndex, tolerance, fuzzPct)
 	}
 
 	changes := 0
@@ -371,7 +395,7 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 	totalBudget := totalSum * tolerance
 
 	if householdIndex == 0 {
-		fmt.Printf("FUZZING: Total sum %.3f, budget %.3f (%.1f%%)\n", totalSum, totalBudget, tolerance*100)
+		fmt.Printf("FUZZING: Total sum %.3f, budget %.3f (%.1f%%), fuzzing %d%% of pairs\n", totalSum, totalBudget, tolerance*100, fuzzPct)
 	}
 
 	// Distribute changes proportionally across value pairs
@@ -380,12 +404,32 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 		return
 	}
 
-	budgetPerPair := totalBudget / float64(pairCount)
+	// Calculate how many pairs to fuzz based on percentage
+	pairsToFuzz := int(float64(pairCount) * float64(fuzzPct) / 100.0)
+	if pairsToFuzz < 1 && fuzzPct > 0 {
+		pairsToFuzz = 1 // Always fuzz at least 1 pair if percentage > 0
+	}
+
+	budgetPerPair := totalBudget / float64(pairsToFuzz) // Distribute budget only among fuzzed pairs
 
 	// Add household-specific variation to prevent identical sequences across households
 	householdMultiplier := 1.0 + float64(householdIndex)*0.1 // 1.0, 1.1, 1.2, etc.
 
-	for i := 0; i < len(data)-1; i += 2 {
+	// Create a list of pair indices and randomly select which ones to fuzz
+	allPairIndices := make([]int, pairCount)
+	for i := 0; i < pairCount; i++ {
+		allPairIndices[i] = i * 2 // Store the starting index of each pair
+	}
+
+	// Shuffle the indices to randomly select pairs
+	for i := len(allPairIndices) - 1; i > 0; i-- {
+		j := getRandom(i + 1)
+		allPairIndices[i], allPairIndices[j] = allPairIndices[j], allPairIndices[i]
+	}
+
+	// Only fuzz the first pairsToFuzz pairs from the shuffled list
+	for pairIdx := 0; pairIdx < pairsToFuzz; pairIdx++ {
+		i := allPairIndices[pairIdx]
 		if i+1 < len(data) {
 			// Scale change amount by tolerance and add household variation
 			baseChangeAmount := budgetPerPair * householdMultiplier
@@ -395,8 +439,8 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 			changeAmount := baseChangeAmount + positionVariation
 
 			// Only show debug for first household and first few pairs
-			if householdIndex == 0 && i < 6 {
-				//fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
+			if householdIndex == 0 && pairIdx < 3 {
+				fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
 			}
 
 			// Zero-sum redistribution: add to one, subtract from the other
@@ -408,13 +452,13 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 	}
 
 	if householdIndex == 0 {
-		//mt.Printf("FUZZING: Made %d changes for household %d\n", changes, householdIndex)
+		fmt.Printf("FUZZING: Made %d changes across %d/%d pairs for household %d\n", changes, pairsToFuzz, pairCount, householdIndex)
 	}
 }
 
 // Keep the old function for backward compatibility
 func applyAggressiveBreaking(data []float64, tolerance float64) {
-	applyAggressiveBreakingWithHousehold(data, tolerance, 0)
+	applyAggressiveBreakingWithHousehold(data, tolerance, 0, 100) // 100% fuzzing for backward compatibility
 }
 
 /* func applyAggressiveBreaking(data []float64, tolerance float64) {

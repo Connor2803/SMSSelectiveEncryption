@@ -104,6 +104,7 @@ var edgeNumberArray = []int{}
 var house_sample = []float64{}
 var elapsedTime time.Duration
 var originalLeakedData [][]float64 // For realistic attack: leaked data from original unfuzzed source
+var asrDebugMode bool              // For detailed ASR attack verification logging
 
 // Utility functions
 func almostEqual(a, b float64) bool {
@@ -597,6 +598,20 @@ func attackParties(P []*party) (attackSuccessNum int) {
 	}
 
 	var matched_households = identifyParty(P, attacker_data_block, randomParty, randomStart)
+
+	// ASR verification logging
+	if asrDebugMode {
+		if len(matched_households) == 1 && matched_households[0] == randomParty {
+			fmt.Printf("ASR DEBUG: SUCCESSFUL attack - Target: %d, Matched: %v ✓\n", randomParty, matched_households)
+		} else if len(matched_households) == 0 {
+			fmt.Printf("ASR DEBUG: FAILED attack - Target: %d, No matches found\n", randomParty)
+		} else if len(matched_households) == 1 {
+			fmt.Printf("ASR DEBUG: FAILED attack - Target: %d, Wrongly matched: %d\n", randomParty, matched_households[0])
+		} else {
+			fmt.Printf("ASR DEBUG: FAILED attack - Target: %d, Multiple matches: %v (ambiguous)\n", randomParty, matched_households)
+		}
+	}
+
 	if len(matched_households) == 1 && matched_households[0] == randomParty {
 		attackSuccessNum++
 	}
