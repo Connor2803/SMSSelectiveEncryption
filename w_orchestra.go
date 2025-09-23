@@ -71,7 +71,7 @@ func main() {
 	defer csvFile.Close()
 
 	// Write CSV header
-	_, err = csvFile.WriteString("approach,tolerance,ratio,asr,time\n")
+	_, err = csvFile.WriteString("approach,tolerance,ratio,asr,preprocessing_time,encryption_time,attack_time,total_time\n")
 	check(err)
 
 	// Iterate all combinations
@@ -80,15 +80,15 @@ func main() {
 
 	for _, tol := range tolVals {
 		for _, ratio := range ratioVals {
-			asr, took := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagFuzzPct, *flagShowDebug)
+			asr, preprocessTime, encryptTime, attackTime, totalTime := runOneCombo(original, fileList, *flagApproach, tol, ratio, *flagLoops, *flagATD, *flagFuzzPct, *flagShowDebug)
 
 			// Console output
-			fmt.Printf("Result: approach=%s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d, time=%s)\n",
-				*flagApproach, tol, ratio, asr, *flagLoops, took)
+			fmt.Printf("Result: approach=%s, T=%.2f, ratio=%d%% → ASR=%.4f (loops=%d, total=%s, preprocess=%s, encrypt=%s, attack=%s)\n",
+				*flagApproach, tol, ratio, asr, *flagLoops, totalTime, preprocessTime, encryptTime, attackTime)
 
 			// CSV output
-			csvLine := fmt.Sprintf("%s,%.2f,%d,%.4f,%s\n",
-				*flagApproach, tol, ratio, asr, took)
+			csvLine := fmt.Sprintf("%s,%.2f,%d,%.4f,%s,%s,%s,%s\n",
+				*flagApproach, tol, ratio, asr, preprocessTime, encryptTime, attackTime, totalTime)
 			_, err = csvFile.WriteString(csvLine)
 			check(err)
 		}
@@ -97,9 +97,13 @@ func main() {
 	fmt.Printf("Results saved to %s\n", *flagCSVOut)
 }
 
-// Run a single (tol, ratio) combo end-to-end and return ASR
-func runOneCombo(original [][]float64, fileList []string, approach string, tol float64, ratio int, loops int, atd int, fuzzPct int, showDebug bool) (float64, time.Duration) {
+// Run a single (tol, ratio) combo end-to-end and return ASR with separate timing measurements
+func runOneCombo(original [][]float64, fileList []string, approach string, tol float64, ratio int, loops int, atd int, fuzzPct int, showDebug bool) (float64, time.Duration, time.Duration, time.Duration, time.Duration) {
 	comboStart := time.Now()
+
+	// PHASE 1: PREPROCESSING (data loading, fuzzing, parameter setup)
+	preprocessStart := time.Now()
+
 	// 2) Series breaking from original each time (no carry-over)
 	var broken [][]float64
 	if tol == 0.0 || strings.ToLower(approach) == "none" {
@@ -114,6 +118,8 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 			panic("approach must be sliding|adaptive|none")
 		}
 	}
+
+	preprocessTime := time.Since(preprocessStart)
 
 	fuzzedData := broken // Keep reference to fuzzed data
 
@@ -138,6 +144,9 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 
 	P := genparties(params, fileList)
 	generateInputsFromMatrix(P, broken) // fills rawInput, greedyInputs/Flags, etc.
+
+	// PHASE 2: ENCRYPTION (selective encryption processing)
+	encryptStart := time.Now()
 
 	// 4) Uniqueness-based selective encryption (greedy)
 	encryptionRatio = ratio
@@ -181,9 +190,18 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	// 5) Set original data for realistic attack leaked sequences
 	originalLeakedData = original
 
+	encryptTime := time.Since(encryptStart)
+
+	// PHASE 3: ATTACK SIMULATION (the actual attack loops)
+	attackStart := time.Now()
+
 	// 6) Run attacker loops on encrypted stream
 	asr := runAttackAverage(P, loops)
-	return asr, time.Since(comboStart)
+
+	attackTime := time.Since(attackStart)
+	totalTime := time.Since(comboStart)
+
+	return asr, preprocessTime, encryptTime, attackTime, totalTime
 }
 
 func countEncrypted(P []*party) (total, encrypted int) {

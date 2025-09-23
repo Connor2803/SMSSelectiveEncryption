@@ -389,16 +389,6 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 	}
 
 	changes := 0
-
-	// Calculate total budget based on data sum and tolerance
-	totalSum := sum(data)
-	totalBudget := totalSum * tolerance
-
-	if householdIndex == 0 {
-		fmt.Printf("FUZZING: Total sum %.3f, budget %.3f (%.1f%%), fuzzing %d%% of pairs\n", totalSum, totalBudget, tolerance*100, fuzzPct)
-	}
-
-	// Distribute changes proportionally across value pairs
 	pairCount := len(data) / 2
 	if pairCount == 0 {
 		return
@@ -410,44 +400,100 @@ func applyAggressiveBreakingWithHousehold(data []float64, tolerance float64, hou
 		pairsToFuzz = 1 // Always fuzz at least 1 pair if percentage > 0
 	}
 
+	// OPTIMIZATION: Early exit if no fuzzing needed
+	if pairsToFuzz == 0 {
+		if householdIndex == 0 {
+			fmt.Printf("FUZZING: No pairs to fuzz (0%%), skipping processing\n")
+		}
+		return
+	}
+
+	// OPTIMIZATION: Only calculate sum if we're actually fuzzing
+	totalSum := sum(data)
+	totalBudget := totalSum * tolerance
+
+	if householdIndex == 0 {
+		fmt.Printf("FUZZING: Total sum %.3f, budget %.3f (%.1f%%), fuzzing %d%% of pairs\n", totalSum, totalBudget, tolerance*100, fuzzPct)
+	}
+
 	budgetPerPair := totalBudget / float64(pairsToFuzz) // Distribute budget only among fuzzed pairs
 
 	// Add household-specific variation to prevent identical sequences across households
 	householdMultiplier := 1.0 + float64(householdIndex)*0.1 // 1.0, 1.1, 1.2, etc.
 
-	// Create a list of pair indices and randomly select which ones to fuzz
-	allPairIndices := make([]int, pairCount)
-	for i := 0; i < pairCount; i++ {
-		allPairIndices[i] = i * 2 // Store the starting index of each pair
-	}
+	// OPTIMIZATION: Use different strategies based on fuzzing percentage
+	// For high percentages (>95%), sequential processing is more efficient than random selection
+	if float64(fuzzPct) > 95.0 {
+		// High percentage fuzzing: iterate sequentially through pairs
+		if householdIndex == 0 {
+			fmt.Printf("FUZZING: High percentage (%d%%), using sequential pair processing\n", fuzzPct)
+		}
 
-	// Shuffle the indices to randomly select pairs
-	for i := len(allPairIndices) - 1; i > 0; i-- {
-		j := getRandom(i + 1)
-		allPairIndices[i], allPairIndices[j] = allPairIndices[j], allPairIndices[i]
-	}
+		for pairIdx := 0; pairIdx < pairsToFuzz && pairIdx < pairCount; pairIdx++ {
+			i := pairIdx * 2 // Convert pair index to data index
+			if i+1 < len(data) {
+				// Scale change amount by tolerance and add household variation
+				baseChangeAmount := budgetPerPair * householdMultiplier
 
-	// Only fuzz the first pairsToFuzz pairs from the shuffled list
-	for pairIdx := 0; pairIdx < pairsToFuzz; pairIdx++ {
-		i := allPairIndices[pairIdx]
-		if i+1 < len(data) {
-			// Scale change amount by tolerance and add household variation
-			baseChangeAmount := budgetPerPair * householdMultiplier
+				// Add some position-based variation within the budget
+				positionVariation := float64(pairIdx%3) * 0.1 * baseChangeAmount // 0%, 10%, 20% variation
+				changeAmount := baseChangeAmount + positionVariation
 
-			// Add some position-based variation within the budget
-			positionVariation := float64((i/2)%3) * 0.1 * baseChangeAmount // 0%, 10%, 20% variation
-			changeAmount := baseChangeAmount + positionVariation
+				// Only show debug for first household and first few pairs
+				if householdIndex == 0 && pairIdx < 3 {
+					fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
+				}
 
-			// Only show debug for first household and first few pairs
-			if householdIndex == 0 && pairIdx < 3 {
-				fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
+				// Zero-sum redistribution: add to one, subtract from the other
+				data[i] += changeAmount
+				data[i+1] -= changeAmount
+
+				changes += 2
+			}
+		}
+	} else {
+		// Low to medium percentage fuzzing: random selection without replacement
+		usedPairs := make(map[int]bool) // Track which pairs we've already selected
+
+		for pairIdx := 0; pairIdx < pairsToFuzz; pairIdx++ {
+			// Find an unused random pair
+			var selectedPair int
+			attempts := 0
+			for {
+				randomPairIndex := getRandom(pairCount)
+				if !usedPairs[randomPairIndex] {
+					selectedPair = randomPairIndex
+					usedPairs[randomPairIndex] = true
+					break
+				}
+				attempts++
+				// Fallback to prevent infinite loop in rare cases
+				if attempts > pairCount*2 {
+					selectedPair = randomPairIndex // Just use it even if duplicate
+					break
+				}
 			}
 
-			// Zero-sum redistribution: add to one, subtract from the other
-			data[i] += changeAmount
-			data[i+1] -= changeAmount
+			i := selectedPair * 2 // Convert pair index to data index
+			if i+1 < len(data) {
+				// Scale change amount by tolerance and add household variation
+				baseChangeAmount := budgetPerPair * householdMultiplier
 
-			changes += 2
+				// Add some position-based variation within the budget
+				positionVariation := float64((i/2)%3) * 0.1 * baseChangeAmount // 0%, 10%, 20% variation
+				changeAmount := baseChangeAmount + positionVariation
+
+				// Only show debug for first household and first few pairs
+				if householdIndex == 0 && pairIdx < 3 {
+					fmt.Printf("FUZZING: Pair %d-%d: changing by ±%.3f\n", i, i+1, changeAmount)
+				}
+
+				// Zero-sum redistribution: add to one, subtract from the other
+				data[i] += changeAmount
+				data[i+1] -= changeAmount
+
+				changes += 2
+			}
 		}
 	}
 

@@ -1,0 +1,7 @@
+approach,tolerance,ratio,asr,preprocessing_time,encryption_time,attack_time,total_time
+adaptive,0.05,0,0.0000,49.1395ms,13.5484ms,0s,375.3337ms
+adaptive,0.05,20,0.0000,45.2126ms,30.5406359s,0s,30.8822269s
+adaptive,0.05,40,0.0000,53.2082ms,57.1289125s,0s,57.489062s
+adaptive,0.05,60,0.0000,49.8653ms,1m19.7608085s,0s,1m20.1234992s
+adaptive,0.05,80,0.0000,52.6013ms,1m43.2959427s,0s,1m43.6607762s
+adaptive,0.05,100,0.0000,57.3382ms,2m4.9339285s,0s,2m5.3061652s
