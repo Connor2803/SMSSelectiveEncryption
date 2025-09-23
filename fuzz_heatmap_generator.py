@@ -5,75 +5,108 @@ import numpy as np
 import os
 import re
 import glob
+import argparse
 from matplotlib.ticker import FuncFormatter
 
 OUT_DIR = "plots"
 
 def parse_time_to_seconds(s: str) -> float:
     """
-    Parses strings like '1m39.5861371s', '2m9.75s', '35.2s', optionally with hours '1h2m3.5s'.
+    Parses time strings and converts to seconds.
+    Supports: hours (h), minutes (m), seconds (s), milliseconds (ms), microseconds (µs, us)
+    Examples: '1m39.5861371s', '2m9.75s', '35.2s', '123.45ms', '996.7µs', '1h2m3.5s'
     Returns total seconds as float.
     """
     if pd.isna(s):
         return float("nan")
     s = str(s).strip()
-    parts = re.findall(r'(\d+(?:\.\d+)?)\s*([hms])', s)
+    
+    # Handle microseconds (both µs and us variants)
+    microsecond_pattern = r'(\d+(?:\.\d+)?)\s*([µu]s)'
+    microsecond_parts = re.findall(microsecond_pattern, s)
+    
+    # Handle other time units (h, ms, m, s) - note: ms must come before m
+    time_pattern = r'(\d+(?:\.\d+)?)\s*(h|ms|m|s)'
+    time_parts = re.findall(time_pattern, s)
+    
     total = 0.0
-    for val, unit in parts:
+    
+    # Process microseconds first
+    for val, unit in microsecond_parts:
+        v = float(val)
+        total += v / 1_000_000  # Convert microseconds to seconds
+    
+    # Process other time units
+    for val, unit in time_parts:
         v = float(val)
         if unit == 'h':
             total += v * 3600
         elif unit == 'm':
             total += v * 60
+        elif unit == 'ms':
+            total += v / 1000  # Convert milliseconds to seconds
         elif unit == 's':
             total += v
-    if total == 0.0 and not parts:
+    
+    # If no time units found, try to parse as plain number
+    if total == 0.0 and not microsecond_parts and not time_parts:
         try:
             total = float(s)
         except Exception:
             return float("nan")
+    
     return total
 
-def extract_fuzz_percentage(filename: str) -> int:
+def extract_fuzz_percentage(filename: str, pattern: str) -> int:
     """
-    Extract fuzzing percentage from filename like 'fixedtime_performance_95.csv' -> 95
+    Extract fuzzing percentage from filename using the provided pattern.
+    Pattern should contain '#' as placeholder for the percentage number.
+    E.g., 'fixedtime_performance_#.csv' matches 'fixedtime_performance_95.csv' -> 95
     """
-    match = re.search(r'fixedtime_performance_(\d+)\.csv', filename)
+    # Convert pattern to regex by escaping special chars and replacing # with (\d+)
+    regex_pattern = re.escape(pattern).replace(r'\#', r'(\d+)')
+    match = re.search(regex_pattern, filename)
     if match:
         return int(match.group(1))
     return None
 
-def load_all_fuzz_data() -> pd.DataFrame:
+def load_all_fuzz_data(file_pattern: str = "fixedtime_performance_#.csv") -> pd.DataFrame:
     """
-    Load all fixedtime_performance_##.csv files and combine them into one DataFrame
+    Load all files matching the specified pattern and combine them into one DataFrame
     with an additional 'fuzz_pct' column extracted from the filename.
-    """
-    pattern = "./fixedtime_performance_*.csv"
-    csv_files = glob.glob(pattern)
     
-    # Filter to only files that match the exact pattern
+    Args:
+        file_pattern: Pattern with '#' as placeholder for percentage number
+                     E.g., "fixedtime_performance_#.csv" or "fuzz_#_test.csv"
+    """
+    # Convert pattern to glob pattern by replacing # with *
+    glob_pattern = "./" + file_pattern.replace('#', '*')
+    csv_files = glob.glob(glob_pattern)
+    
+    # Filter to only files that match the exact pattern (with digits where # is)
     fuzz_files = []
+    regex_pattern = re.escape(file_pattern).replace(r'\#', r'\d+')
     for file in csv_files:
-        if re.match(r'^fixedtime_performance_\d+\.csv$', os.path.basename(file)):
+        if re.match(f'^{regex_pattern}$', os.path.basename(file)):
             fuzz_files.append(file)
     
     if not fuzz_files:
-        print("No CSV files found matching pattern fixedtime_performance_##.csv")
+        print(f"No CSV files found matching pattern: {file_pattern}")
         return pd.DataFrame()
     
     # Sort by the fuzzing percentage
-    fuzz_files.sort(key=lambda x: extract_fuzz_percentage(os.path.basename(x)))
+    fuzz_files.sort(key=lambda x: extract_fuzz_percentage(os.path.basename(x), file_pattern))
     
-    print(f"Found {len(fuzz_files)} fuzzing test files:")
+    print(f"Found {len(fuzz_files)} fuzzing test files matching pattern '{file_pattern}':")
     for file in fuzz_files:
-        fuzz_pct = extract_fuzz_percentage(os.path.basename(file))
+        fuzz_pct = extract_fuzz_percentage(os.path.basename(file), file_pattern)
         print(f"  - {os.path.basename(file)} (fuzzing {fuzz_pct}%)")
     
     # Load and combine all files
     all_data = []
     for file_path in fuzz_files:
         filename = os.path.basename(file_path)
-        fuzz_pct = extract_fuzz_percentage(filename)
+        fuzz_pct = extract_fuzz_percentage(filename, file_pattern)
         
         if fuzz_pct is None:
             print(f"Warning: Could not extract fuzzing percentage from {filename}")
@@ -180,7 +213,7 @@ def make_fuzzing_time_heatmap(df: pd.DataFrame):
     
     # Check if we have new timing format (total_time) or old format (time)
     if 'total_time' in df.columns:
-        df_time["time_s"] = df_time["total_time"].apply(parse_time_to_seconds)
+        df_time["time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
     elif 'time' in df.columns:
         df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
     else:
@@ -252,7 +285,7 @@ def make_combined_analysis_plot(df: pd.DataFrame):
     
     # Check if we have new timing format (total_time) or old format (time)
     if 'total_time' in df.columns:
-        df_time["time_s"] = df_time["total_time"].apply(parse_time_to_seconds)
+        df_time["time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
     elif 'time' in df.columns:
         df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
     else:
@@ -565,13 +598,30 @@ def make_preprocessing_time_analysis(df: pd.DataFrame):
         print(f"Wrote {out}")
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate fuzzing analysis plots from CSV files')
+    parser.add_argument('-p', '--pattern', 
+                       default='fixedtime_performance_#.csv',
+                       help='File pattern with # as placeholder for percentage number (default: fixedtime_performance_#.csv)')
+    parser.add_argument('-o', '--output', 
+                       default='plots',
+                       help='Output directory for plots (default: plots)')
+    
+    args = parser.parse_args()
+    
+    # Update global output directory
+    global OUT_DIR
+    OUT_DIR = args.output
+    
     # Create output directory
     os.makedirs(OUT_DIR, exist_ok=True)
     
     print("=== Fuzzing Percentage Analysis ===")
+    print(f"File pattern: {args.pattern}")
+    print(f"Output directory: {OUT_DIR}")
     
     # Load all fuzzing test data
-    df = load_all_fuzz_data()
+    df = load_all_fuzz_data(args.pattern)
     
     if df.empty:
         print("No data loaded. Exiting.")
