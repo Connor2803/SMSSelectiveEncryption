@@ -5,75 +5,108 @@ import numpy as np
 import os
 import re
 import glob
+import argparse
 from matplotlib.ticker import FuncFormatter
 
 OUT_DIR = "plots"
 
 def parse_time_to_seconds(s: str) -> float:
     """
-    Parses strings like '1m39.5861371s', '2m9.75s', '35.2s', optionally with hours '1h2m3.5s'.
+    Parses time strings and converts to seconds.
+    Supports: hours (h), minutes (m), seconds (s), milliseconds (ms), microseconds (µs, us)
+    Examples: '1m39.5861371s', '2m9.75s', '35.2s', '123.45ms', '996.7µs', '1h2m3.5s'
     Returns total seconds as float.
     """
     if pd.isna(s):
         return float("nan")
     s = str(s).strip()
-    parts = re.findall(r'(\d+(?:\.\d+)?)\s*([hms])', s)
+    
+    # Handle microseconds (both µs and us variants)
+    microsecond_pattern = r'(\d+(?:\.\d+)?)\s*([µu]s)'
+    microsecond_parts = re.findall(microsecond_pattern, s)
+    
+    # Handle other time units (h, ms, m, s) - note: ms must come before m
+    time_pattern = r'(\d+(?:\.\d+)?)\s*(h|ms|m|s)'
+    time_parts = re.findall(time_pattern, s)
+    
     total = 0.0
-    for val, unit in parts:
+    
+    # Process microseconds first
+    for val, unit in microsecond_parts:
+        v = float(val)
+        total += v / 1_000_000  # Convert microseconds to seconds
+    
+    # Process other time units
+    for val, unit in time_parts:
         v = float(val)
         if unit == 'h':
             total += v * 3600
         elif unit == 'm':
             total += v * 60
+        elif unit == 'ms':
+            total += v / 1000  # Convert milliseconds to seconds
         elif unit == 's':
             total += v
-    if total == 0.0 and not parts:
+    
+    # If no time units found, try to parse as plain number
+    if total == 0.0 and not microsecond_parts and not time_parts:
         try:
             total = float(s)
         except Exception:
             return float("nan")
+    
     return total
 
-def extract_fuzz_percentage(filename: str) -> int:
+def extract_fuzz_percentage(filename: str, pattern: str) -> int:
     """
-    Extract fuzzing percentage from filename like 'fuzz_95_basetest.csv' -> 95
+    Extract fuzzing percentage from filename using the provided pattern.
+    Pattern should contain '#' as placeholder for the percentage number.
+    E.g., 'fixedtime_performance_#.csv' matches 'fixedtime_performance_95.csv' -> 95
     """
-    match = re.search(r'fuzz_(\d+)_basetest\.csv', filename)
+    # Convert pattern to regex by escaping special chars and replacing # with (\d+)
+    regex_pattern = re.escape(pattern).replace(r'\#', r'(\d+)')
+    match = re.search(regex_pattern, filename)
     if match:
         return int(match.group(1))
     return None
 
-def load_all_fuzz_data() -> pd.DataFrame:
+def load_all_fuzz_data(file_pattern: str = "fixedtime_performance_#.csv") -> pd.DataFrame:
     """
-    Load all fuzz_##_basetest.csv files and combine them into one DataFrame
+    Load all files matching the specified pattern and combine them into one DataFrame
     with an additional 'fuzz_pct' column extracted from the filename.
-    """
-    pattern = "fuzz_*_basetest.csv"
-    csv_files = glob.glob(pattern)
     
-    # Filter to only files that match the exact pattern
+    Args:
+        file_pattern: Pattern with '#' as placeholder for percentage number
+                     E.g., "fixedtime_performance_#.csv" or "fuzz_#_test.csv"
+    """
+    # Convert pattern to glob pattern by replacing # with *
+    glob_pattern = "./" + file_pattern.replace('#', '*')
+    csv_files = glob.glob(glob_pattern)
+    
+    # Filter to only files that match the exact pattern (with digits where # is)
     fuzz_files = []
+    regex_pattern = re.escape(file_pattern).replace(r'\#', r'\d+')
     for file in csv_files:
-        if re.match(r'^fuzz_\d+_basetest\.csv$', os.path.basename(file)):
+        if re.match(f'^{regex_pattern}$', os.path.basename(file)):
             fuzz_files.append(file)
     
     if not fuzz_files:
-        print("No CSV files found matching pattern fuzz_##_basetest.csv")
+        print(f"No CSV files found matching pattern: {file_pattern}")
         return pd.DataFrame()
     
     # Sort by the fuzzing percentage
-    fuzz_files.sort(key=lambda x: extract_fuzz_percentage(os.path.basename(x)))
+    fuzz_files.sort(key=lambda x: extract_fuzz_percentage(os.path.basename(x), file_pattern))
     
-    print(f"Found {len(fuzz_files)} fuzzing test files:")
+    print(f"Found {len(fuzz_files)} fuzzing test files matching pattern '{file_pattern}':")
     for file in fuzz_files:
-        fuzz_pct = extract_fuzz_percentage(os.path.basename(file))
+        fuzz_pct = extract_fuzz_percentage(os.path.basename(file), file_pattern)
         print(f"  - {os.path.basename(file)} (fuzzing {fuzz_pct}%)")
     
     # Load and combine all files
     all_data = []
     for file_path in fuzz_files:
         filename = os.path.basename(file_path)
-        fuzz_pct = extract_fuzz_percentage(filename)
+        fuzz_pct = extract_fuzz_percentage(filename, file_pattern)
         
         if fuzz_pct is None:
             print(f"Warning: Could not extract fuzzing percentage from {filename}")
@@ -175,9 +208,17 @@ def make_fuzzing_time_heatmap(df: pd.DataFrame):
     Create heatmap showing execution time with fuzzing percentage on Y-axis 
     and encryption ratio on X-axis.
     """
-    # Parse time strings to seconds
+    # Parse time strings to seconds - handle both old and new formats
     df_time = df.copy()
-    df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
+    
+    # Check if we have new timing format (total_time) or old format (time)
+    if 'total_time' in df.columns:
+        df_time["time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
+    elif 'time' in df.columns:
+        df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
+    else:
+        print("No timing data available (no 'time' or 'total_time' column found)")
+        return
     
     # Ensure numeric types
     df_time["ratio"] = pd.to_numeric(df_time["ratio"], errors="coerce")
@@ -241,7 +282,15 @@ def make_combined_analysis_plot(df: pd.DataFrame):
     df["fuzz_pct"] = pd.to_numeric(df["fuzz_pct"], errors="coerce")
     df["tolerance"] = pd.to_numeric(df["tolerance"], errors="coerce")
     df_time = df.copy()
-    df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
+    
+    # Check if we have new timing format (total_time) or old format (time)
+    if 'total_time' in df.columns:
+        df_time["time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
+    elif 'time' in df.columns:
+        df_time["time_s"] = df_time["time"].apply(parse_time_to_seconds)
+    else:
+        print("No timing data available for combined analysis")
+        return
     
     tolerances = sorted(df['tolerance'].unique())
     
@@ -403,21 +452,28 @@ def make_asr_vs_fuzzing_plots(df: pd.DataFrame):
         # Create figure with two subplots side by side
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         
-        # 1. ASR vs Fuzzing Percentage (averaged across all encryption ratios)
-        asr_by_fuzz_avg = df_tol.groupby('fuzz_pct')['asr'].mean().reset_index()
-        ax1.plot(asr_by_fuzz_avg['fuzz_pct'], asr_by_fuzz_avg['asr'], 'bo-', linewidth=3, markersize=10, alpha=0.8)
-        ax1.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
-        ax1.set_ylabel("Average ASR", fontsize=12)
-        ax1.set_title("ASR vs Fuzzing Percentage\n(Average ASR for all ratios)", fontsize=14)
-        ax1.grid(True, alpha=0.3)
-        ax1.set_ylim(0, max(1.0, asr_by_fuzz_avg['asr'].max() * 1.1))
-        ax1.set_xlim(asr_by_fuzz_avg['fuzz_pct'].min() - 2, asr_by_fuzz_avg['fuzz_pct'].max() + 2)
+        # 1. ASR vs Fuzzing Percentage (separate line for each encryption ratio)
+        colors = plt.cm.viridis(np.linspace(0, 1, len(df_tol['ratio'].unique())))
+        max_asr = 0
         
-        # Add trend line
-        if len(asr_by_fuzz_avg) > 1:
-            z = np.polyfit(asr_by_fuzz_avg['fuzz_pct'], asr_by_fuzz_avg['asr'], 1)
-            p = np.poly1d(z)
-            ax1.plot(asr_by_fuzz_avg['fuzz_pct'], p(asr_by_fuzz_avg['fuzz_pct']), "r--", alpha=0.8, linewidth=2)
+        for i, ratio in enumerate(sorted(df_tol['ratio'].unique())):
+            df_ratio = df_tol[df_tol['ratio'] == ratio].copy()
+            if not df_ratio.empty:
+                asr_by_fuzz = df_ratio.groupby('fuzz_pct')['asr'].mean().reset_index()
+                ax1.plot(asr_by_fuzz['fuzz_pct'], asr_by_fuzz['asr'], 
+                        'o-', color=colors[i], linewidth=2, markersize=6, 
+                        alpha=0.8, label=f'{int(ratio)}% encryption')
+                max_asr = max(max_asr, asr_by_fuzz['asr'].max())
+        
+        ax1.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
+        ax1.set_ylabel("ASR", fontsize=12)
+        ax1.set_title("ASR vs Fuzzing Percentage\n(Each encryption ratio)", fontsize=14)
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax1.set_ylim(0, max(1.0, max_asr * 1.1))
+        
+        if not df_tol.empty:
+            ax1.set_xlim(df_tol['fuzz_pct'].min() - 2, df_tol['fuzz_pct'].max() + 2)
         
         # 2. ASR vs Fuzzing Percentage (0% encryption ratio only)
         df_0_ratio = df_tol[df_tol['ratio'] == 0].copy()
@@ -431,11 +487,6 @@ def make_asr_vs_fuzzing_plots(df: pd.DataFrame):
             ax2.set_ylim(0, max(1.0, asr_by_fuzz_0['asr'].max() * 1.1))
             ax2.set_xlim(asr_by_fuzz_0['fuzz_pct'].min() - 2, asr_by_fuzz_0['fuzz_pct'].max() + 2)
             
-            # Add trend line
-            if len(asr_by_fuzz_0) > 1:
-                z = np.polyfit(asr_by_fuzz_0['fuzz_pct'], asr_by_fuzz_0['asr'], 1)
-                p = np.poly1d(z)
-                ax2.plot(asr_by_fuzz_0['fuzz_pct'], p(asr_by_fuzz_0['fuzz_pct']), "r--", alpha=0.8, linewidth=2)
         else:
             ax2.text(0.5, 0.5, 'No data for 0% encryption ratio', 
                     horizontalalignment='center', verticalalignment='center', 
@@ -460,14 +511,117 @@ def make_asr_vs_fuzzing_plots(df: pd.DataFrame):
         plt.close()
         print(f"Wrote {out}")
 
+def make_preprocessing_time_analysis(df: pd.DataFrame):
+    """
+    Create plots showing preprocessing time vs fuzzing percentage.
+    """
+    # Check if preprocessing_time column exists (new timing format)
+    if 'preprocessing_time' not in df.columns:
+        print("No preprocessing_time column found. Skipping preprocessing time analysis.")
+        return
+    
+    # Parse preprocessing time strings to seconds
+    df_time = df.copy()
+    df_time["preprocessing_time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
+    
+    # Ensure numeric types
+    df_time["ratio"] = pd.to_numeric(df_time["ratio"], errors="coerce")
+    df_time["fuzz_pct"] = pd.to_numeric(df_time["fuzz_pct"], errors="coerce")
+    df_time["tolerance"] = pd.to_numeric(df_time["tolerance"], errors="coerce")
+    
+    # Remove rows with invalid preprocessing times
+    df_time = df_time.dropna(subset=['preprocessing_time_s'])
+    
+    if df_time.empty:
+        print("No valid preprocessing time data found.")
+        return
+    
+    tolerances = sorted(df_time['tolerance'].unique())
+    
+    for tolerance in tolerances:
+        df_tol = df_time[df_time['tolerance'] == tolerance].copy()
+        
+        if df_tol.empty:
+            continue
+        
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # 1. Average preprocessing time vs fuzzing percentage (across all encryption ratios)
+        preprocessing_by_fuzz = df_tol.groupby('fuzz_pct')['preprocessing_time_s'].mean().reset_index()
+        ax1.plot(preprocessing_by_fuzz['fuzz_pct'], preprocessing_by_fuzz['preprocessing_time_s'], 
+                'bo-', linewidth=3, markersize=8, alpha=0.8)
+        ax1.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
+        ax1.set_ylabel("Average Preprocessing Time (seconds)", fontsize=12)
+        ax1.set_title("Preprocessing Time vs Fuzzing Percentage\n(Average across all encryption ratios)", fontsize=14)
+        ax1.grid(True, alpha=0.3)
+        ax1.set_ylim(0, preprocessing_by_fuzz['preprocessing_time_s'].max() * 1.1)
+        ax1.set_xlim(preprocessing_by_fuzz['fuzz_pct'].min() - 2, preprocessing_by_fuzz['fuzz_pct'].max() + 2)
+        
+        # 2. Preprocessing time by encryption ratio (separate lines)
+        colors = plt.cm.plasma(np.linspace(0, 1, len(df_tol['ratio'].unique())))
+        max_time = 0
+        
+        for i, ratio in enumerate(sorted(df_tol['ratio'].unique())):
+            df_ratio = df_tol[df_tol['ratio'] == ratio].copy()
+            if not df_ratio.empty:
+                preprocessing_by_fuzz_ratio = df_ratio.groupby('fuzz_pct')['preprocessing_time_s'].mean().reset_index()
+                ax2.plot(preprocessing_by_fuzz_ratio['fuzz_pct'], preprocessing_by_fuzz_ratio['preprocessing_time_s'], 
+                        'o-', color=colors[i], linewidth=2, markersize=6, 
+                        alpha=0.8, label=f'{int(ratio)}% encryption')
+                max_time = max(max_time, preprocessing_by_fuzz_ratio['preprocessing_time_s'].max())
+        
+        ax2.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
+        ax2.set_ylabel("Preprocessing Time (seconds)", fontsize=12)
+        ax2.set_title("Preprocessing Time vs Fuzzing Percentage\n(By encryption ratio)", fontsize=14)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax2.set_ylim(0, max_time * 1.1)
+        
+        if not df_tol.empty:
+            ax2.set_xlim(df_tol['fuzz_pct'].min() - 2, df_tol['fuzz_pct'].max() + 2)
+        
+        # Add overall title
+        approach = df_tol['approach'].iloc[0] if len(df_tol['approach'].unique()) == 1 else "Mixed"
+        if tolerance == 0.0:
+            fig.suptitle(f"Preprocessing Time Analysis — {approach.capitalize()} (Baseline)", fontsize=16, y=1.02)
+        else:
+            fig.suptitle(f"Preprocessing Time Analysis — {approach.capitalize()} (T={tolerance})", fontsize=16, y=1.02)
+        
+        plt.tight_layout()
+        
+        # Save plot with tolerance in filename
+        tol_str = "baseline" if tolerance == 0.0 else f"tol{tolerance:.2f}".replace(".", "")
+        out = os.path.join(OUT_DIR, f"preprocessing_time_vs_fuzzing_percentage_{tol_str}.png")
+        plt.savefig(out, dpi=200, bbox_inches="tight")
+        plt.close()
+        print(f"Wrote {out}")
+
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate fuzzing analysis plots from CSV files')
+    parser.add_argument('-p', '--pattern', 
+                       default='fixedtime_performance_#.csv',
+                       help='File pattern with # as placeholder for percentage number (default: fixedtime_performance_#.csv)')
+    parser.add_argument('-o', '--output', 
+                       default='plots',
+                       help='Output directory for plots (default: plots)')
+    
+    args = parser.parse_args()
+    
+    # Update global output directory
+    global OUT_DIR
+    OUT_DIR = args.output
+    
     # Create output directory
     os.makedirs(OUT_DIR, exist_ok=True)
     
     print("=== Fuzzing Percentage Analysis ===")
+    print(f"File pattern: {args.pattern}")
+    print(f"Output directory: {OUT_DIR}")
     
     # Load all fuzzing test data
-    df = load_all_fuzz_data()
+    df = load_all_fuzz_data(args.pattern)
     
     if df.empty:
         print("No data loaded. Exiting.")
@@ -487,6 +641,7 @@ def main():
     make_combined_analysis_plot(df)
     make_fuzzing_comparison_plot(df)
     make_asr_vs_fuzzing_plots(df)
+    make_preprocessing_time_analysis(df)
     
     print(f"\n✓ All fuzzing analysis plots saved to {OUT_DIR}/")
 
