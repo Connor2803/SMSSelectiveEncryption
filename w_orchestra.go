@@ -53,13 +53,13 @@ func main() {
 	}
 
 	// Dataset and global thresholds
-	currentDataset = DATASET_ELECTRICITY
-	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
+	currentDataset = DATASET_WATER
+	transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 	asrDebugMode = *flagASRDebug
 
 	// 1) Load data using utils.getFileList + resizeCSV
-	println("Testing series breaking and uniqueness selection for electricity data...")
-	fileList := getFileList("electricity")
+	println("Testing series breaking and uniqueness selection for water data...")
+	fileList := getFileList("water")
 	if len(fileList) == 0 {
 		panic("no dataset files found")
 	}
@@ -167,7 +167,7 @@ func runOneCombo(original [][]float64, fileList []string, approach string, tol f
 	atdSize = atd
 	min_percent_matched = *flagMatchPct // Set matching percentage from command line
 	maxHouseholdsNumber = len(P)
-	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
+	transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 
 	if showDebug {
 		total, enc := countEncrypted(P)

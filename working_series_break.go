@@ -31,8 +31,8 @@ func seriesBreakMain() {
 func testSeriesBreakingAlgorithms(params ckks.Parameters, runs int) {
 	//fmt.println("Testing series breaking algorithms for electricity data...")
 
-	// Load real electricity dataset
-	fileList := getFileList("electricity")
+	// Load real water dataset
+	fileList := getFileList("water")
 	if fileList == nil {
 		//fmt.println("Error: Could not load electricity dataset")
 		return
@@ -681,11 +681,11 @@ type SeriesBreakingResult struct {
 func testSeriesBreakingEffectiveness(params ckks.Parameters, original, broken [][]float64, approachName string, tolerance float64) SeriesBreakingResult {
 	// Test original data
 	//fmt.printf("  Testing original data...")
-	originalASR, originalTime := runEncryptionTest(params, original, "electricity")
+	originalASR, originalTime := runEncryptionTest(params, original, "water")
 
 	// Test broken data
 	//fmt.printf("  Testing broken data...")
-	brokenASR, brokenTime := runEncryptionTest(params, broken, "electricity")
+	brokenASR, brokenTime := runEncryptionTest(params, broken, "water")
 
 	// Calculate metrics
 	totalPreservation := calculateTotalPreservation(original, broken)
@@ -712,10 +712,10 @@ func runEncryptionTest(params ckks.Parameters, data [][]float64, dataset string)
 	P := convertDataToParties(data)
 
 	// Set global variables for the test
-	currentDataset = DATASET_ELECTRICITY
+	currentDataset = DATASET_WATER
 	// Encryption ratio of 0.6
 	encryptionRatio = 60
-	transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
+	transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 
 	//fmt.printf("    Generating inputs from data...\n")
 	// Process the data directly without loading files

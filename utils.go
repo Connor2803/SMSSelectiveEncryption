@@ -294,7 +294,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 		delta := 0.0
 		for i := range po.rawInput {
 			var value float64
-			if currentDataset == DATASET_ELECTRICITY {
+			if currentDataset == DATASET_WATER {
 				realValue := math.Round(partyRows[i]*1000) / 1000
 				decoratedValue := math.Round(partyRows[i]*10) / 10
 				delta += decoratedValue - realValue
@@ -307,7 +307,7 @@ func genInputs(P []*party) (expSummation, expAverage, expDeviation []float64, mi
 			}
 
 			po.rawInput[i] = value
-			if currentDataset == DATASET_ELECTRICITY {
+			if currentDataset == DATASET_WATER {
 				po.greedyInputs[i/sectionSize][i%sectionSize] = value
 			}
 
@@ -376,9 +376,9 @@ func runOptimizationTest(testType string, params ckks.Parameters, dataset, strat
 		currentTarget = 1 // entropy
 		transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 	} else {
-		currentDataset = DATASET_ELECTRICITY
+		currentDataset = DATASET_WATER
 		currentTarget = 2 // transition/uniqueness
-		transitionEqualityThreshold = ELECTRICITY_TRANSITION_EQUALITY_THRESHOLD
+		transitionEqualityThreshold = WATER_TRANSITION_EQUALITY_THRESHOLD
 	}
 
 	encryptionRatio = ratio
