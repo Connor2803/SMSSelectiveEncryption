@@ -513,86 +513,164 @@ def make_asr_vs_fuzzing_plots(df: pd.DataFrame):
 
 def make_preprocessing_time_analysis(df: pd.DataFrame):
     """
-    Create plots showing preprocessing time vs fuzzing percentage.
+    Create plot showing average preprocessing time vs fuzzing percentage (across all encryption ratios).
+    Also print the raw averages for 0% and 100% fuzzing.
     """
     # Check if preprocessing_time column exists (new timing format)
     if 'preprocessing_time' not in df.columns:
         print("No preprocessing_time column found. Skipping preprocessing time analysis.")
         return
-    
+
     # Parse preprocessing time strings to seconds
     df_time = df.copy()
     df_time["preprocessing_time_s"] = df_time["preprocessing_time"].apply(parse_time_to_seconds)
-    
+
     # Ensure numeric types
     df_time["ratio"] = pd.to_numeric(df_time["ratio"], errors="coerce")
     df_time["fuzz_pct"] = pd.to_numeric(df_time["fuzz_pct"], errors="coerce")
     df_time["tolerance"] = pd.to_numeric(df_time["tolerance"], errors="coerce")
-    
+
     # Remove rows with invalid preprocessing times
     df_time = df_time.dropna(subset=['preprocessing_time_s'])
-    
+
     if df_time.empty:
         print("No valid preprocessing time data found.")
         return
-    
+
     tolerances = sorted(df_time['tolerance'].unique())
-    
+
     for tolerance in tolerances:
         df_tol = df_time[df_time['tolerance'] == tolerance].copy()
-        
+
         if df_tol.empty:
             continue
-        
-        # Create figure with two subplots
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-        
-        # 1. Average preprocessing time vs fuzzing percentage (across all encryption ratios)
+
+        # Print raw averages for 0% and 100% fuzzing
+        for pct in [0, 100]:
+            avg = df_tol[df_tol['fuzz_pct'] == pct]['preprocessing_time_s'].mean()
+            if not np.isnan(avg):
+                print(f"Average preprocessing time for fuzz_pct={pct}% (tolerance={tolerance}): {avg:.6f} seconds ({avg*1000:.2f} ms)")
+            else:
+                print(f"No data for fuzz_pct={pct}% (tolerance={tolerance})")
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # Average preprocessing time vs fuzzing percentage (across all encryption ratios)
         preprocessing_by_fuzz = df_tol.groupby('fuzz_pct')['preprocessing_time_s'].mean().reset_index()
-        ax1.plot(preprocessing_by_fuzz['fuzz_pct'], preprocessing_by_fuzz['preprocessing_time_s'], 
+        ax.plot(preprocessing_by_fuzz['fuzz_pct'], preprocessing_by_fuzz['preprocessing_time_s'],
                 'bo-', linewidth=3, markersize=8, alpha=0.8)
-        ax1.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
-        ax1.set_ylabel("Average Preprocessing Time (seconds)", fontsize=12)
-        ax1.set_title("Preprocessing Time vs Fuzzing Percentage\n(Average across all encryption ratios)", fontsize=14)
-        ax1.grid(True, alpha=0.3)
-        ax1.set_ylim(0, preprocessing_by_fuzz['preprocessing_time_s'].max() * 1.1)
-        ax1.set_xlim(preprocessing_by_fuzz['fuzz_pct'].min() - 2, preprocessing_by_fuzz['fuzz_pct'].max() + 2)
-        
-        # 2. Preprocessing time by encryption ratio (separate lines)
-        colors = plt.cm.plasma(np.linspace(0, 1, len(df_tol['ratio'].unique())))
-        max_time = 0
-        
-        for i, ratio in enumerate(sorted(df_tol['ratio'].unique())):
-            df_ratio = df_tol[df_tol['ratio'] == ratio].copy()
-            if not df_ratio.empty:
-                preprocessing_by_fuzz_ratio = df_ratio.groupby('fuzz_pct')['preprocessing_time_s'].mean().reset_index()
-                ax2.plot(preprocessing_by_fuzz_ratio['fuzz_pct'], preprocessing_by_fuzz_ratio['preprocessing_time_s'], 
-                        'o-', color=colors[i], linewidth=2, markersize=6, 
-                        alpha=0.8, label=f'{int(ratio)}% encryption')
-                max_time = max(max_time, preprocessing_by_fuzz_ratio['preprocessing_time_s'].max())
-        
-        ax2.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
-        ax2.set_ylabel("Preprocessing Time (seconds)", fontsize=12)
-        ax2.set_title("Preprocessing Time vs Fuzzing Percentage\n(By encryption ratio)", fontsize=14)
-        ax2.grid(True, alpha=0.3)
-        ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        ax2.set_ylim(0, max_time * 1.1)
-        
-        if not df_tol.empty:
-            ax2.set_xlim(df_tol['fuzz_pct'].min() - 2, df_tol['fuzz_pct'].max() + 2)
-        
+        ax.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
+        ax.set_ylabel("Average Preprocessing Time (seconds)", fontsize=12)
+        ax.set_title("Preprocessing Time vs Fuzzing Percentage\n(Average across all encryption ratios)", fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(0, preprocessing_by_fuzz['preprocessing_time_s'].max() * 1.1)
+        ax.set_xlim(preprocessing_by_fuzz['fuzz_pct'].min() - 2, preprocessing_by_fuzz['fuzz_pct'].max() + 2)
+
         # Add overall title
         approach = df_tol['approach'].iloc[0] if len(df_tol['approach'].unique()) == 1 else "Mixed"
         if tolerance == 0.0:
             fig.suptitle(f"Preprocessing Time Analysis — {approach.capitalize()} (Baseline)", fontsize=16, y=1.02)
         else:
             fig.suptitle(f"Preprocessing Time Analysis — {approach.capitalize()} (T={tolerance})", fontsize=16, y=1.02)
-        
+
         plt.tight_layout()
-        
+
         # Save plot with tolerance in filename
         tol_str = "baseline" if tolerance == 0.0 else f"tol{tolerance:.2f}".replace(".", "")
         out = os.path.join(OUT_DIR, f"preprocessing_time_vs_fuzzing_percentage_{tol_str}.png")
+        plt.savefig(out, dpi=200, bbox_inches="tight")
+        plt.close()
+        print(f"Wrote {out}")
+
+def make_encryption_time_analysis(df: pd.DataFrame):
+    """
+    Create plot showing average encryption time vs fuzzing percentage (across all encryption ratios).
+    Also print the raw averages for 0% and 100% fuzzing.
+    """
+    # Check if encryption_time column exists (new timing format)
+    if 'encryption_time' not in df.columns:
+        print("No encryption_time column found. Skipping encryption time analysis.")
+        return
+
+    # Parse encryption time strings to seconds
+    df_time = df.copy()
+    df_time["encryption_time_s"] = df_time["encryption_time"].apply(parse_time_to_seconds)
+
+    # Ensure numeric types
+    df_time["ratio"] = pd.to_numeric(df_time["ratio"], errors="coerce")
+    df_time["fuzz_pct"] = pd.to_numeric(df_time["fuzz_pct"], errors="coerce")
+    df_time["tolerance"] = pd.to_numeric(df_time["tolerance"], errors="coerce")
+
+    # Remove rows with invalid encryption times
+    df_time = df_time.dropna(subset=['encryption_time_s'])
+
+    if df_time.empty:
+        print("No valid encryption time data found.")
+        return
+
+    tolerances = sorted(df_time['tolerance'].unique())
+
+    for tolerance in tolerances:
+        df_tol = df_time[df_time['tolerance'] == tolerance].copy()
+
+        if df_tol.empty:
+            continue
+
+        # Print raw averages for all fuzzing percentages
+        print(f"\n=== Encryption Time Analysis (tolerance={tolerance}) ===")
+        for pct in sorted(df_tol['fuzz_pct'].unique()):
+            avg = df_tol[df_tol['fuzz_pct'] == pct]['encryption_time_s'].mean()
+            if not np.isnan(avg):
+                if avg < 1:
+                    print(f"Average encryption time for fuzz_pct={pct:3d}% (tolerance={tolerance}): {avg:.6f} seconds ({avg*1000:.2f} ms)")
+                else:
+                    minutes = int(avg // 60)
+                    seconds = avg % 60
+                    if minutes > 0:
+                        print(f"Average encryption time for fuzz_pct={pct:3d}% (tolerance={tolerance}): {avg:.2f} seconds ({minutes}m{seconds:.2f}s)")
+                    else:
+                        print(f"Average encryption time for fuzz_pct={pct:3d}% (tolerance={tolerance}): {avg:.2f} seconds")
+            else:
+                print(f"No data for fuzz_pct={pct}% (tolerance={tolerance})")
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Average encryption time vs fuzzing percentage (across all encryption ratios)
+        encryption_by_fuzz = df_tol.groupby('fuzz_pct')['encryption_time_s'].mean().reset_index()
+        ax.plot(encryption_by_fuzz['fuzz_pct'], encryption_by_fuzz['encryption_time_s'],
+                'ro-', linewidth=3, markersize=8, alpha=0.8)
+        ax.set_xlabel("Fuzzing Percentage (%)", fontsize=12)
+        ax.set_ylabel("Average Encryption Time (seconds)", fontsize=12)
+        ax.set_title("Encryption Time vs Fuzzing Percentage\n(Average across all encryption ratios)", fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(0, encryption_by_fuzz['encryption_time_s'].max() * 1.1)
+        ax.set_xlim(encryption_by_fuzz['fuzz_pct'].min() - 2, encryption_by_fuzz['fuzz_pct'].max() + 2)
+
+        # Format y-axis to show time in minutes if > 60 seconds
+        def format_time(x, p):
+            if x >= 60:
+                minutes = int(x // 60)
+                seconds = x % 60
+                return f"{minutes}m{seconds:.0f}s"
+            else:
+                return f"{x:.1f}s"
+        
+        ax.yaxis.set_major_formatter(FuncFormatter(format_time))
+
+        # Add overall title
+        approach = df_tol['approach'].iloc[0] if len(df_tol['approach'].unique()) == 1 else "Mixed"
+        if tolerance == 0.0:
+            fig.suptitle(f"Encryption Time Analysis — {approach.capitalize()} (Baseline)", fontsize=16, y=1.02)
+        else:
+            fig.suptitle(f"Encryption Time Analysis — {approach.capitalize()} (T={tolerance})", fontsize=16, y=1.02)
+
+        plt.tight_layout()
+
+        # Save plot with tolerance in filename
+        tol_str = "baseline" if tolerance == 0.0 else f"tol{tolerance:.2f}".replace(".", "")
+        out = os.path.join(OUT_DIR, f"encryption_time_vs_fuzzing_percentage_{tol_str}.png")
         plt.savefig(out, dpi=200, bbox_inches="tight")
         plt.close()
         print(f"Wrote {out}")
@@ -642,6 +720,7 @@ def main():
     make_fuzzing_comparison_plot(df)
     make_asr_vs_fuzzing_plots(df)
     make_preprocessing_time_analysis(df)
+    make_encryption_time_analysis(df)
     
     print(f"\n✓ All fuzzing analysis plots saved to {OUT_DIR}/")
 
