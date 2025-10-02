@@ -3,10 +3,10 @@
 
 # Define the base command components
 $baseCommand = "go run .\w_orchestra.go .\utils.go .\working_series_break.go"
-$fixedParams = "-approach adaptive -tols `"0.05`" -ratios `"0,10,20,30,40,50,60,70,80,90`" -loops 1000 -atd 4 -match 100"
+$fixedParams = "-approach sliding -tols `"0.05`" -ratios `"0,10,20,30,40,50,60,70,80,90`" -loops 1000 -atd 4 -match 100"
 
-# Define the percentages to test (10-70 in 5% increments, skipping 25 and 50)
-$percentages = @(60,70,80,90,100)
+# Define the percentages to test (0-100 in 10% increments)
+$percentages = @(0,10,20,30,40,50,60,70,80,90,100)
 
 Write-Host "Starting fuzzing percentage tests..." -ForegroundColor Green
 Write-Host "Testing percentages: $($percentages -join ', ')%" -ForegroundColor Cyan
@@ -17,7 +17,7 @@ $currentTest = 0
 
 foreach ($percentage in $percentages) {
     $currentTest++
-    $csvFile = "adaptive_water_fuzz_{0:D2}.csv" -f $percentage
+    $csvFile = "sliding_water_fuzz_{0:D2}.csv" -f $percentage
     
     Write-Host "[$currentTest/$totalTests] Running test with $percentage% fuzzing..." -ForegroundColor Yellow
     Write-Host "Output file: $csvFile" -ForegroundColor Gray
